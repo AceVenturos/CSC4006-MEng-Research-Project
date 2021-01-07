@@ -1,0 +1,4 @@
+python main.py --batch 2 --epochs 1 --load_generator_network pre_trained_models/generator_0.pt --load_discriminator_network pre_trained_models/discriminator_0.pt
+
+# Test Command OG datatset with larger images
+python main.py --batch 2 --epochs 1 --path_to_places365 'places365_standardog'

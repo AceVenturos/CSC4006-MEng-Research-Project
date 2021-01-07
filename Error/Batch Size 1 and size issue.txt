@@ -1,0 +1,50 @@
+
+(base) C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master>python main.py --batch_size 1
+Number of generator parameters 19748356
+Number of discriminator parameters 6710083
+Validation:   0%|                                                                                                                                                                       | 1/90172950 [14:00<21047979:35:12, 840.30s/it]T
+raceback (most recent call last):
+  File "main.py", line 111, in <module>
+    model_wrapper.train(epochs=args.epochs, device=args.device)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\model_wrapper.py", line 181, in train
+    loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\lossfunction.py", line 99, in forward
+    assert images_fake.shape[0] > 1
+AssertionError
+Validation:   0%|          | 1/90172950 [14:02<21101606:58:41, 842.45s/it]
+
+(base) C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master>python main.py --batch_size 2 --epochs 1
+Number of generator parameters 19748356
+Number of discriminator parameters 6710083
+Validation:   0%|                                                                                                                                                                          | 2/1803459 [07:40<115279:10:11, 230.12s/it]C
+:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\functional.py:3062: UserWarning: nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.
+  warnings.warn("nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.")
+C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\functional.py:3062: UserWarning: nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.
+  warnings.warn("nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.")
+FID=225.6041, Loss Div=0.0059, Loss Rec=0.0057, Loss G=0.2022, Loss D=0.3386:   0%|                                                                                                           | 90/1803459 [08:07<152:30:41,  3.28it/s]T
+raceback (most recent call last):
+  File "main.py", line 111, in <module>
+    model_wrapper.train(epochs=args.epochs, device=args.device)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\model_wrapper.py", line 141, in train
+    for images_real, labels, masks in self.training_dataset:
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\utils\data\dataloader.py", line 345, in __next__
+    data = self._next_data()
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\utils\data\dataloader.py", line 856, in _next_data
+    return self._process_data(data)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\utils\data\dataloader.py", line 881, in _process_data
+    data.reraise()
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\_utils.py", line 395, in reraise
+    raise self.exc_type(msg)
+RuntimeError: Caught RuntimeError in DataLoader worker process 1.
+Original Traceback (most recent call last):
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\utils\data\_utils\worker.py", line 178, in _worker_loop
+    data = fetcher.fetch(index)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\utils\data\_utils\fetch.py", line 47, in fetch
+    return self.collate_fn(data)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\data.py", line 77, in image_label_list_of_masks_collate_function
+    images = torch.stack([instance[0] for instance in batch], dim=0)
+RuntimeError: stack expects each tensor to be equal size, but got [3, 770, 512] at entry 0 and [3, 256, 256] at entry 1
+
+FID=225.6041, Loss Div=0.0059, Loss Rec=0.0057, Loss G=0.2022, Loss D=0.3386:   0%|          | 90/1803459 [08:08<2716:13:23,  5.42s/it]

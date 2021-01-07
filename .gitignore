@@ -1,0 +1,10 @@
+places365_standard/
+places365_standard5/
+places365_standardog/
+
+__pycache__/
+
+saved_data/
+
+vgg_places365.h5
+

@@ -1,0 +1,22 @@
+# Original Image (256x256) feature map list sizes:
+torch.Size([1, 64, 128, 128])
+torch.Size([1, 128, 64, 64])
+torch.Size([1, 256, 32, 32])
+torch.Size([1, 512, 16, 16])
+torch.Size([1, 512, 8, 8])
+torch.Size([1, 4096])
+torch.Size([1, 365])
+torch.Size([1, 8192])
+torch.Size([1, 512, 4, 4])
+
+# 128x128
+torch.Size([1, 64, 64, 64])
+torch.Size([1, 128, 32, 32])
+torch.Size([1, 256, 16, 16])
+torch.Size([1, 512, 8, 8])
+torch.Size([1, 512, 4, 4])
+torch.Size([1, 4096])
+torch.Size([1, 365])
+torch.Size([1, 8192])
+torch.Size([1, 512, 4, 4])
+

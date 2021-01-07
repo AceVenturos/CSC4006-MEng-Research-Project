@@ -1,0 +1,32 @@
+(base) C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master>python main.py --batch_size 2 --epochs 1
+Number of generator parameters 19748356
+Number of discriminator parameters 6710083
+Validation:   0%|                                                                                                                                                                                            | 0/24998 [00:00<?, ?it/s]C
+:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\functional.py:3062: UserWarning: nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.
+  warnings.warn("nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.")
+FID=336.1422, Loss Div=0.0074, Loss Rec=0.0046, Loss G=0.3287, Loss D=0.3620:   0%|                                                                                                               | 24/24998 [00:34<3:55:17,  1.77it/s]C
+:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\functional.py:3062: UserWarning: nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.
+  warnings.warn("nn.functional.upsample_nearest is deprecated. Use nn.functional.interpolate instead.")
+FID=336.1422, Loss Div=0.0128, Loss Rec=0.0023, Loss G=0.4715, Loss D=0.0029: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████| 24998/24998 [2:11:40<00:00,  3.16it/s]
+Traceback (most recent call last):
+  File "main.py", line 115, in <module>
+    print('FID=', model_wrapper.validate(device=args.device))
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\autograd\grad_mode.py", line 15, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\model_wrapper.py", line 243, in validate
+    fake_image = self.generator(input=self.validation_latents,
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\models.py", line 97, in forward
+    output = self.final_block(output)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\container.py", line 100, in forward
+    input = module(input)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\upsampling.py", line 131, in forward
+    return F.interpolate(input, self.size, self.scale_factor, self.mode, self.align_corners)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\functional.py", line 3012, in interpolate
+    return torch._C._nn.upsample_bilinear2d(input, _interp_output_size(2, closed_over_args), align_corners,
+RuntimeError: CUDA out of memory. Tried to allocate 784.00 MiB (GPU 0; 6.00 GiB total capacity; 2.60 GiB already allocated; 440.63 MiB free; 4.26 GiB reserved in total by PyTorch)

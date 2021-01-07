@@ -1,0 +1,2 @@
+python main.py --train 0 --batch 2 --epochs 1 --load_generator_network pre_trained_model
+s/generator_0.pt --load_discriminator_network pre_trained_models/discriminator_0.pt

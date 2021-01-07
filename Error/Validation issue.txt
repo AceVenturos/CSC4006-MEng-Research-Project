@@ -1,0 +1,22 @@
+(base) C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master>python main.py --batch_size 2 --epochs 1 --train 0 --load_generator_network pre_trained_
+models/generator_0.pt --load_discriminator_network pre_trained_models/discriminator_0.pt
+Number of generator parameters 19748356
+Number of discriminator parameters 6710083
+Traceback (most recent call last):
+  File "main.py", line 115, in <module>
+    print('FID=', model_wrapper.validate(device=args.device))
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\autograd\grad_mode.py", line 15, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\model_wrapper.py", line 244, in validate
+    features=self.vgg16(self.validation_images_to_plot),
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\Documents\Me\University\MEng\CSC4006 - Research and Development Project\Code\Semantic_Pyramid_for_Image_Generation-master\models.py", line 189, in forward
+    output = layer(output)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\module.py", line 550, in __call__
+    result = self.forward(*input, **kwargs)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\conv.py", line 353, in forward
+    return self._conv_forward(input, self.weight)
+  File "C:\Users\jmcke\anaconda3\lib\site-packages\torch\nn\modules\conv.py", line 349, in _conv_forward
+    return F.conv2d(input, weight, self.bias, self.stride,
+RuntimeError: Input type (torch.cuda.FloatTensor) and weight type (torch.FloatTensor) should be the same
