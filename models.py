@@ -81,10 +81,10 @@ class Generator(nn.Module):
             else:
                 output = layer(output)
         # Doesn't cause the issue - Jamie
-        print(output.shape)
+        print("Output before reshape = " + str(output.shape))
         # Reshaping
         output = output.view(output.shape[0], int(output.shape[1] // (4 ** 2)), 4, 4)
-        print(output.shape)
+        print("Output after reshape = " + str(output.shape))
         # Main path
         for layer in self.main_path:
             # print("Input Path: " + str(layer))
@@ -321,7 +321,7 @@ class GeneratorResidualBlock(nn.Module):
         mapped_features = self.masked_feature_mapping(masked_features)
 
         # 1. Shape size issue here - Jamie
-        # 2. output_main.shape = [1, 512, 8, 8], mask is [1, 512, 4, 4]
+        # 2. output_main.shape = [1, 512, 8, 8], mapped/masked features is [1, 512, 4, 4]
         # 3. Deduced shape changes to [1, 512, 8, 8] in upsampling layer.
         # 4. Upsampling on original produces output_main.shape of [1, 512, 8, 8], issue could be mask shape
         # 5. Both the 256x256 and 128x128 lead to a tensor of [1, 512, 4, 4] just before the residual blocks begin
