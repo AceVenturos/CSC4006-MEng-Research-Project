@@ -6,6 +6,7 @@ from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
 import torchvision
 
+upsamplingFlag = False
 
 class Generator(nn.Module):
     '''
@@ -26,7 +27,7 @@ class Generator(nn.Module):
         # Init linear input layers
         self.input_path = nn.ModuleList([
             LinearBlock(in_features=latent_dimensions, out_features=128, feature_size=365),
-            LinearBlock(in_features=128, out_features=128, feature_size=4096),
+            LinearBlock(in_features=128, out_features=128, feature_size=2048),
             nn.Linear(in_features=128, out_features=int(512 // channels_factor) * 4 * 4),
             nn.LeakyReLU(negative_slope=0.2)
         ])
@@ -85,6 +86,10 @@ class Generator(nn.Module):
         # Reshaping
         output = output.view(output.shape[0], int(output.shape[1] // (4 ** 2)), 4, 4)
         print("Output after reshape = " + str(output.shape))
+
+        global upsamplingFlag
+        upsamplingFlag = False
+
         # Main path
         for layer in self.main_path:
             # print("Input Path: " + str(layer))
@@ -197,15 +202,30 @@ class VGG16(nn.Module):
             output = layer(output)
             if isinstance(layer, nn.MaxPool2d):
                 features.append(output)
+
+        print("Pre-AVG Pool: " + str(output.shape))
         # Average pool operation
         output = self.vgg16.avgpool(output)
+        print("Post-AVG Pool: " + str(output.shape))
         # Flatten tensor
         output = output.flatten(start_dim=1)
+        print("Post-Flatten Pool: " + str(output.shape))
         # Classification path
         for index, layer in enumerate(self.vgg16.classifier):
             output = layer(output)
-            if index == 3 or index == 6:
+            print("Classifier Layer " + str(index) + ": " + str(output.shape))
+            if index == 3:
+                # temp_out = torch.nn.functional.interpolate(output, [1, 2048], 0.5, mode='bilinear')
+                # Interpolate functions only works with 3d, 4d, 5d input tensors - Jamie
+                downsampleAAP = torch.nn.AdaptiveAvgPool1d(2048)
+                input = output.unsqueeze(1)
+                temp_out = downsampleAAP(input)
+                temp_out = torch.squeeze(temp_out, 0)
+                print("Temp out shape: " + str(temp_out.shape))
+                features.append(temp_out)
+            elif index == 6:
                 features.append(output)
+
         return features
 
 
@@ -315,10 +335,17 @@ class GeneratorResidualBlock(nn.Module):
         output_residual = self.residual_mapping(input)
         output_main = output_main + output_residual
         # Upsampling
+        global upsamplingFlag
+        print(upsamplingFlag)
         print("output_main.shape before upsampling = " + str(output_main.shape))
-        output_main = self.upsampling(output_main)
+        if(upsamplingFlag):
+            output_main = self.upsampling(output_main)
+        else:
+            upsamplingFlag = True
+
         # Feature path
         mapped_features = self.masked_feature_mapping(masked_features)
+
 
         # 1. Shape size issue here - Jamie
         # 2. output_main.shape = [1, 512, 8, 8], mapped/masked features is [1, 512, 4, 4]
@@ -334,6 +361,11 @@ class GeneratorResidualBlock(nn.Module):
         #    to 4098 and then to a tensor of  [1, 512, 2, 2]. My understanding of the structure of the generator is that
         #    it is akin to going through the VGG16 model in reverse with the feature maps from the corresponding VGG16
         #    layer being added to the input noise. Is this is initial [1, 512, 4, 4] just noise?
+        # 8. VGG16 model now produces a vector of length 2048 instead of 4096 in classification block before layer of
+        #    size 365.
+        # 9. My current thinking, is that the layers producing the shape of 4096 in vgg16 don't affect this issue as
+        #    initially thought, a current, potentially crude solution has been to place a flag variable on the first
+        #    layer of the main block (of residual layers) such that the upsampling issue from 6. has been remedied.
         print("output_main.shape = " + str(output_main.shape))
         print("mapped_features.shape = " + str(mapped_features.shape))
 
