@@ -10,8 +10,9 @@ import json
 # Mask size set for training here - Jamie
 def get_masks_for_training(
         mask_shapes: List[Tuple] =
-        [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (2048,), (365,)],
+        [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
         #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
+        # Update masks if necassary i.e. 4096 - Jamie
         device: str = 'cpu', add_batch_size: bool = False,
         p_random_mask: float = 0.3) -> List[torch.Tensor]:
     '''
@@ -85,7 +86,7 @@ def get_masks_for_training(
 
 # I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
 def get_masks_for_validation(mask_shapes: List[Tuple] =
-                            [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (2048,), (365,)],
+                            [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
                             #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
                             device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
     return get_masks_for_inference(layer_index_to_choose=np.random.choice(range(len(mask_shapes))),
@@ -93,7 +94,7 @@ def get_masks_for_validation(mask_shapes: List[Tuple] =
 
 # I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
 def get_masks_for_inference(layer_index_to_choose: int, mask_shapes: List[Tuple] =
-                            [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (2048,), (365,)],
+                            [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
                             #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
                             device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
     # Init list for masks

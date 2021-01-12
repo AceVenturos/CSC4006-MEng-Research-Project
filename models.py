@@ -27,7 +27,8 @@ class Generator(nn.Module):
         # Init linear input layers
         self.input_path = nn.ModuleList([
             LinearBlock(in_features=latent_dimensions, out_features=128, feature_size=365),
-            LinearBlock(in_features=128, out_features=128, feature_size=2048),
+            # Change 4096 to 2048 - Jamie
+            LinearBlock(in_features=128, out_features=128, feature_size=4096),
             nn.Linear(in_features=128, out_features=int(512 // channels_factor) * 4 * 4),
             nn.LeakyReLU(negative_slope=0.2)
         ])
@@ -214,17 +215,19 @@ class VGG16(nn.Module):
         for index, layer in enumerate(self.vgg16.classifier):
             output = layer(output)
             print("Classifier Layer " + str(index) + ": " + str(output.shape))
-            if index == 3:
-                # temp_out = torch.nn.functional.interpolate(output, [1, 2048], 0.5, mode='bilinear')
-                # Interpolate functions only works with 3d, 4d, 5d input tensors - Jamie
-                downsampleAAP = torch.nn.AdaptiveAvgPool1d(2048)
-                input = output.unsqueeze(1)
-                temp_out = downsampleAAP(input)
-                temp_out = torch.squeeze(temp_out, 0)
-                print("Temp out shape: " + str(temp_out.shape))
-                features.append(temp_out)
-            elif index == 6:
+            if index == 3 or index == 6:
                 features.append(output)
+            # if index == 3:
+            #     # temp_out = torch.nn.functional.interpolate(output, [1, 2048], 0.5, mode='bilinear')
+            #     # Interpolate functions only works with 3d, 4d, 5d input tensors - Jamie
+            #     downsampleAAP = torch.nn.AdaptiveAvgPool1d(2048)
+            #     input = output.unsqueeze(1)
+            #     temp_out = downsampleAAP(input)
+            #     temp_out = torch.squeeze(temp_out, 0)
+            #     print("Temp out shape: " + str(temp_out.shape))
+            #     features.append(temp_out)
+            # elif index == 6:
+            #     features.append(output)
 
         return features
 
