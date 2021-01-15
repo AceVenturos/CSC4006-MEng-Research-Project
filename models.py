@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torchvision
 
 upsamplingFlag = False
+downsamplingFlag = 0
 
 class Generator(nn.Module):
     '''
@@ -83,10 +84,10 @@ class Generator(nn.Module):
             else:
                 output = layer(output)
         # Doesn't cause the issue - Jamie
-        print("Output before reshape = " + str(output.shape))
+        # print("Output before reshape = " + str(output.shape))
         # Reshaping
         output = output.view(output.shape[0], int(output.shape[1] // (4 ** 2)), 4, 4)
-        print("Output after reshape = " + str(output.shape))
+        # print("Output after reshape = " + str(output.shape))
 
         global upsamplingFlag
         upsamplingFlag = False
@@ -127,22 +128,37 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         # Init layers
         self.layers = nn.Sequential(
-            DiscriminatorResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
-            SelfAttention(channels=int(256 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
-            SelfAttention(channels=int(256 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
-        )
+                    DiscriminatorResidualBlock(in_channels=in_channels, out_channels=int(32 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(32 // channel_factor), out_channels=int(64 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
+                    SelfAttention(channels=int(128 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(128 // channel_factor)),
+                    SelfAttention(channels=int(128 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(128 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(128 // channel_factor)),
+                    DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(128 // channel_factor)),
+                )
+        # self.layers = nn.Sequential(
+        #     DiscriminatorResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
+        #     SelfAttention(channels=int(256 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+        #     SelfAttention(channels=int(256 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+        #     DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+        # )
         # Init classification layer
         self.classification = spectral_norm(
-            nn.Linear(in_features=int(256 // channel_factor) * 2 * 2, out_features=1, bias=True))
+            nn.Linear(in_features=int(128 // channel_factor) * 2 * 2, out_features=1, bias=True))
+        # self.classification = spectral_norm(
+        #     nn.Linear(in_features=int(256 // channel_factor) * 2 * 2, out_features=1, bias=True))
         # Init embedding layer
         self.embedding = spectral_norm(nn.Embedding(num_embeddings=number_of_classes,
-                                                    embedding_dim=int(256 // channel_factor) * 2 * 2))
+                                                    embedding_dim=int(128 // channel_factor) * 2 * 2))
+        # self.embedding = spectral_norm(nn.Embedding(num_embeddings=number_of_classes,
+        #                                             embedding_dim=int(256 // channel_factor) * 2 * 2))
         self.embedding.weight.data.uniform_(-0.1, 0.1)
 
     def forward(self, input: torch.Tensor, class_id: torch.Tensor) -> torch.Tensor:
@@ -152,14 +168,63 @@ class Discriminator(nn.Module):
         :return: (torch.Tensor) Output prediction of shape (batch size, 1)
         '''
         # Main path
+        # print("Input Size: " + str(input.shape))
+        global downsamplingFlag
+        downsamplingFlag = 0
         output = self.layers(input)
+        # print("Output Size after sequential block: " + str(output.shape))
+
+        # 1. Once layers have been resized for 128x128 images, issue arises with tenor shapes @ the 2nd output_embedding
+        #    line. Multiplication of output.unsqueeze and output_embedding - Jamie 13/01/21 16:02
+
+        # 2. 128x128 vs 256x256
+        #    a) Input Sizes: [2, 3, 128, 128] vs [2, 3, 256, 256]
+        #    b) Output Size after sequential block: [2, 128, 1, 1] vs [2, 256, 2, 2]
+        #    c) Output Size after flatten: [2, 128] vs [2, 1024]
+        #    d) Output embedding: [2, 365, 512] vs [2, 365, 1024]
+        #    I believe the error arises within the sequential block, and the output tensor [2, 128, 1, 1] leading to the
+        #    flatten function to produce a tensor too small/incorrect. - Jamie 13/01/21 16:09
+
+        # 3. Similar to the upsampling issue I was having with the Generator Model, there is a downsampling issue with
+        #    downsampling. The difference is that the point of failure (or when the tensor has been up/downsampled 1
+        #    level too much) is at the last residual layer and not the first. I will try and similar approach by
+        #    adding a flag in the form of a counter variable which will skip the downsample on the 6th and final
+        #    Discriminator residual layer - Jamie 13/01/21 16:22
+        #
+        #    128x128 results for residual layer output tensor sizes after downsampling for reference (note between
+        #    residual block occurs between a) and b) noted in 2) :
+        #    torch.Size([2, 32, 64, 64])
+        #    torch.Size([2, 64, 32, 32])
+        #    torch.Size([2, 128, 16, 16])
+        #    torch.Size([2, 128, 8, 8])
+        #    torch.Size([2, 128, 4, 4])
+        #    torch.Size([2, 128, 2, 2])
+        #    torch.Size([2, 128, 1, 1])
+
+        # 4. Seems to have worked *fingers crossed*. Will comment out print statements here and in the
+        #    discriminator residual block first. Then let the model train, noting changes in param count and expected
+        #    training time for 1 epoch and batch size 2 compared to the original, @bottom of file. - Jamie 13/01 14:36
+        #
+        #    New residual block shapes for ref:
+        #    torch.Size([2, 32, 64, 64])
+        #    torch.Size([2, 64, 32, 32])
+        #    torch.Size([2, 128, 16, 16])
+        #    torch.Size([2, 128, 8, 8])
+        #    torch.Size([2, 128, 4, 4])
+        #    torch.Size([2, 128, 2, 2])
+        #    torch.Size([2, 128, 2, 2])
+
         # Reshape output into two dimensions
         output = output.flatten(start_dim=1)
+        # print("Output Size after flatten: " + str(output.shape))
         # Perform embedding
         output_embedding = self.embedding(class_id)
+        # print("Output embedding: " + str(output.shape))
         output_embedding = (output.unsqueeze(dim=1) * output_embedding).sum(dim=1)
+        # print("Output embedding 2: " + str(output.shape))
         # Classification path
         output = self.classification(output)
+        # print("Output size after classification: " + str(output.shape))
         return output + output_embedding
 
 
@@ -204,17 +269,17 @@ class VGG16(nn.Module):
             if isinstance(layer, nn.MaxPool2d):
                 features.append(output)
 
-        print("Pre-AVG Pool: " + str(output.shape))
+        #print("Pre-AVG Pool: " + str(output.shape))
         # Average pool operation
         output = self.vgg16.avgpool(output)
-        print("Post-AVG Pool: " + str(output.shape))
+        #print("Post-AVG Pool: " + str(output.shape))
         # Flatten tensor
         output = output.flatten(start_dim=1)
-        print("Post-Flatten Pool: " + str(output.shape))
+        #print("Post-Flatten Pool: " + str(output.shape))
         # Classification path
         for index, layer in enumerate(self.vgg16.classifier):
             output = layer(output)
-            print("Classifier Layer " + str(index) + ": " + str(output.shape))
+            #print("Classifier Layer " + str(index) + ": " + str(output.shape))
             if index == 3 or index == 6:
                 features.append(output)
             # if index == 3:
@@ -328,7 +393,7 @@ class GeneratorResidualBlock(nn.Module):
         :param masked_features: (torch.Tensor) Masked feature tensor form vvg16
         :return: (torch.Tensor) Output tensor
         '''
-        print("Generator residual block forward")
+        # print("Generator residual block forward")
         # TODO: Remove print debugging statements
         # Main path
         # print(input.shape)
@@ -339,8 +404,8 @@ class GeneratorResidualBlock(nn.Module):
         output_main = output_main + output_residual
         # Upsampling
         global upsamplingFlag
-        print(upsamplingFlag)
-        print("output_main.shape before upsampling = " + str(output_main.shape))
+        # print(upsamplingFlag)
+        # print("output_main.shape before upsampling = " + str(output_main.shape))
         if(upsamplingFlag):
             output_main = self.upsampling(output_main)
         else:
@@ -369,8 +434,8 @@ class GeneratorResidualBlock(nn.Module):
         # 9. My current thinking, is that the layers producing the shape of 4096 in vgg16 don't affect this issue as
         #    initially thought, a current, potentially crude solution has been to place a flag variable on the first
         #    layer of the main block (of residual layers) such that the upsampling issue from 6. has been remedied.
-        print("output_main.shape = " + str(output_main.shape))
-        print("mapped_features.shape = " + str(mapped_features.shape))
+        # print("output_main.shape = " + str(output_main.shape))
+        # print("mapped_features.shape = " + str(mapped_features.shape))
 
         # Addition step
         output = output_main + mapped_features
@@ -455,5 +520,17 @@ class DiscriminatorResidualBlock(nn.Module):
         output_residual = self.residual_mapping(input)
         output = output + output_residual
         # Downsampling
-        output = self.downsampling(output)
+        global downsamplingFlag
+        # print(downsamplingFlag)
+        if(downsamplingFlag < 6):
+            output = self.downsampling(output)
+            downsamplingFlag += 1
+
+        # print(output.shape)
         return output
+
+# Downsizing Training Results 13/01 - 16:51
+# Parameters G: 19,748,356
+# Parameters D: 1,772,963
+# Iterations:   1,803,459
+# Predicted training time ~100-120 Hours for 1 epoch with a batch size of 2

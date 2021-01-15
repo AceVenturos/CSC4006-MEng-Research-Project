@@ -10,9 +10,10 @@ import json
 # Mask size set for training here - Jamie
 def get_masks_for_training(
         mask_shapes: List[Tuple] =
-        [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
+        [(64, 32, 32), (128, 16, 16), (256, 8, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
+        #[(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
         #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-        # Update masks if necassary i.e. 4096 - Jamie
+        # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01 11:54
         device: str = 'cpu', add_batch_size: bool = False,
         p_random_mask: float = 0.3) -> List[torch.Tensor]:
     '''
