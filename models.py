@@ -6,8 +6,11 @@ from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
 import torchvision
 
-upsamplingFlag = False
-downsamplingFlag = 0
+upsamplingCount = 0
+# Updated upsamplingFlag to upsamplingCount to bypass a second upsampling layer - Jamie 25/01/17:51
+downsamplingCount = 0
+# Updated downsamplingFlag to downsamplingCount to bypass a second upsampling layer - Jamie 25/01/18:12
+
 
 class Generator(nn.Module):
     '''
@@ -27,7 +30,7 @@ class Generator(nn.Module):
         self.latent_dimensions = latent_dimensions
         # Init linear input layers
         self.input_path = nn.ModuleList([
-            LinearBlock(in_features=latent_dimensions, out_features=128, feature_size=365),
+            LinearBlock(in_features=latent_dimensions, out_features=128, feature_size=10),
             # Change 4096 to 2048 - Jamie
             LinearBlock(in_features=128, out_features=128, feature_size=4096),
             nn.Linear(in_features=128, out_features=int(512 // channels_factor) * 4 * 4),
@@ -89,8 +92,8 @@ class Generator(nn.Module):
         output = output.view(output.shape[0], int(output.shape[1] // (4 ** 2)), 4, 4)
         # print("Output after reshape = " + str(output.shape))
 
-        global upsamplingFlag
-        upsamplingFlag = False
+        global upsamplingCount
+        upsamplingCount = 0
 
         # Main path
         for layer in self.main_path:
@@ -169,8 +172,8 @@ class Discriminator(nn.Module):
         '''
         # Main path
         # print("Input Size: " + str(input.shape))
-        global downsamplingFlag
-        downsamplingFlag = 0
+        global downsamplingCount
+        downsamplingCount = 0
         output = self.layers(input)
         # print("Output Size after sequential block: " + str(output.shape))
 
@@ -247,6 +250,7 @@ class VGG16(nn.Module):
             self.vgg16 = torchvision.models.vgg16(pretrained=False)
         # Convert feature module into model list
         self.vgg16.features = nn.ModuleList(list(self.vgg16.features))
+        # print(self.vgg16.features)
         # Convert classifier into module list
         self.vgg16.classifier = nn.ModuleList(list(self.vgg16.classifier))
 
@@ -264,22 +268,31 @@ class VGG16(nn.Module):
         # Init list for features
         features = []
         # Feature path
+        # Completed work around for obtaining feature maps from CNN after removing final MaxPool layer,
+        # Noting featMapCount == 10 @ the final ReLU layer - Jamie 25/01/21 18:06
+        featMapCount = 0
         for layer in self.vgg16.features:
+            # print(layer)
             output = layer(output)
-            if isinstance(layer, nn.MaxPool2d):
-                features.append(output)
 
-        #print("Pre-AVG Pool: " + str(output.shape))
+            if isinstance(layer, nn.MaxPool2d) or featMapCount >= 4:
+                featMapCount += 1
+                # print(featMapCount)
+                if featMapCount <= 4 or featMapCount == 10:
+                    # print('HERE')
+                    features.append(output)
+
+        # print("Pre-AVG Pool: " + str(output.shape))
         # Average pool operation
         output = self.vgg16.avgpool(output)
-        #print("Post-AVG Pool: " + str(output.shape))
+        # print("Post-AVG Pool: " + str(output.shape))
         # Flatten tensor
         output = output.flatten(start_dim=1)
-        #print("Post-Flatten Pool: " + str(output.shape))
+        # print("Post-Flatten Pool: " + str(output.shape))
         # Classification path
         for index, layer in enumerate(self.vgg16.classifier):
             output = layer(output)
-            #print("Classifier Layer " + str(index) + ": " + str(output.shape))
+            # print("Classifier Layer " + str(index) + ": " + str(output.shape))
             if index == 3 or index == 6:
                 features.append(output)
             # if index == 3:
@@ -403,13 +416,14 @@ class GeneratorResidualBlock(nn.Module):
         output_residual = self.residual_mapping(input)
         output_main = output_main + output_residual
         # Upsampling
-        global upsamplingFlag
-        # print(upsamplingFlag)
+        global upsamplingCount
+        # print(upsamplingCount)
         # print("output_main.shape before upsampling = " + str(output_main.shape))
-        if(upsamplingFlag):
+        if(upsamplingCount > 1):
             output_main = self.upsampling(output_main)
-        else:
-            upsamplingFlag = True
+
+        upsamplingCount += 1
+
 
         # Feature path
         mapped_features = self.masked_feature_mapping(masked_features)
@@ -520,11 +534,11 @@ class DiscriminatorResidualBlock(nn.Module):
         output_residual = self.residual_mapping(input)
         output = output + output_residual
         # Downsampling
-        global downsamplingFlag
+        global downsamplingCount
         # print(downsamplingFlag)
-        if(downsamplingFlag < 6):
+        if(downsamplingCount < 5):
             output = self.downsampling(output)
-            downsamplingFlag += 1
+            downsamplingCount += 1
 
         # print(output.shape)
         return output

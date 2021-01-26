@@ -281,9 +281,9 @@ class ModelWrapper(object):
                 # feature map list being shape [1,512,4,4] where the mask being applied to it at line 101 in models.py is
                 # [1, 1, 8, 8] and is expecting [1, 512, 8, 8]. - Jamie
                 listBoi = (self.vgg16(image))
-                print("Inference: Feature map shapes:")
-                for item in listBoi:
-                    print(item.shape)
+                # print("Inference: Feature map shapes:")
+                # for item in listBoi:
+                #     print(item.shape)
 
                 fake_image = self.generator(
                     input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),

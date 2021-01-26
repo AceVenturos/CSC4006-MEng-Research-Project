@@ -33,10 +33,13 @@ parser.add_argument('--load_generator_network', type=str, default=None,
 parser.add_argument('--load_discriminator_network', type=str, default=None,
                     help='Name of the discriminator network the be loaded from model file (.pt) (default=None)')
 
-parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/vgg_places_365.pt',
+# Updated to retrained classifier Jamie 24/01 08:57
+# Updated after correctly saving classifier model as model file and not state dict - Jamie 24/01 09:19
+parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10.pt',
                     help='Name of the pretrained (places365) vgg16 network the be loaded from model file (.pt)')
 
-parser.add_argument('--path_to_places365', type=str, default='places365_standard',
+# Updated to new training data - Jamie 24/01 08:57
+parser.add_argument('--path_to_places365', type=str, default='../Training Data/places365_standard10',
                     help='Path to places365 dataset.')
 
 parser.add_argument('--epochs', type=int, default=50,
@@ -86,18 +89,21 @@ if __name__ == '__main__':
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
 
     # Init dataset
+    # Changed num of workers to 2 instead of batch size - Jamie 25/01/21 21:04
     training_dataset = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='train.txt'),
-        batch_size=args.batch_size, num_workers=args.batch_size, shuffle=True,
+        batch_size=args.batch_size, num_workers=2, shuffle=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
     # Changed max_length from 6000 to 50 - Jamie
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
                        max_length=50, validation=True),
-        batch_size=args.batch_size, num_workers=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, num_workers=2, shuffle=False,
         collate_fn=data.image_label_list_of_masks_collate_function)
     validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
                                         test=True)
+
+    print(training_dataset.__len__())
     # Init model wrapper
     model_wrapper = ModelWrapper(generator=generator,
                                  discriminator=discriminator,

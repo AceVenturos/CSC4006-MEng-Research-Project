@@ -7,4 +7,5 @@ __pycache__/
 saved_data/
 
 vgg_places365.h5
-
+VGG16_retrain/vgg_places365.pt
+VGG16_retrain/VGG16_P1.pt
