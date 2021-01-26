@@ -1,3 +1,7 @@
+## Reduced Class Dataset
+Download here: https://gofile.io/d/E6C8wT
+Reduced to 10 classes from orginally used Places365 and image size reduced from 256x256 to 128x128
+
 ## Acknowledgement
 https://github.com/ChristophReich1996/Semantic_Pyramid_for_Image_Generation
 
