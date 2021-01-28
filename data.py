@@ -22,7 +22,8 @@ class Places365(Dataset):
         self.validation = validation
         self.test = test
         # Get index file
-        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name)).values[:, 0]
+        # My guy forgot to add header=None, pandas reads first line as a header by default - Jamie 27/01/21 13:17
+        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name), header=None).values[:, 0]
         self.file_paths.sort()
         # Make dict of labels
         self.label_dict = dict()

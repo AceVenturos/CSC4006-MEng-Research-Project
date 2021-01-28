@@ -103,6 +103,9 @@ class DiversityLoss(nn.Module):
         # Divide latent inputs into two paris
         latent_inputs_1 = latent_inputs[:latent_inputs.shape[0] // 2]
         latent_inputs_2 = latent_inputs[latent_inputs.shape[0] // 2:]
+        # print("Full fake image batch size: {}      Latent input batch size: {}".format(images_fake.__len__(), latent_inputs.__len__()))
+        # print("Images Fake shapes 1: {} 2: {}".format(images_fake_1.shape, images_fake_2.shape))
+        # print("Latent Input shapes 1: {} 2: {}".format(latent_inputs_1.shape, latent_inputs_2.shape))
         # Calc loss
         loss = self.l1_loss(latent_inputs_1, latent_inputs_2) / (
                 self.l1_loss(images_fake_1, images_fake_2) + self.epsilon)
