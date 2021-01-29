@@ -92,17 +92,17 @@ if __name__ == '__main__':
     # Changed num of workers to 2 instead of batch size - Jamie 25/01/21 21:04
     training_dataset = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='train.txt'),
-        batch_size=args.batch_size, num_workers=2, shuffle=True,
+        batch_size=args.batch_size, num_workers=2, shuffle=True, drop_last=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
 
     # 50,000 divisible by 32, 64 and 128 produce irrational numbers -> doesn't explain issues for 2, 8 and
     # 16 - Jamie 27/01/12:22
     # print(len(training_dataset.dataset))
     # exit(0)
-    # Changed max_length from 6000 to 50 - Jamie
+    # Changed max_length from 6000 to 200 - Jamie
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                       max_length=50, validation=True),
+                       max_length=200, validation=True),
         batch_size=args.batch_size, num_workers=2, shuffle=False,
         collate_fn=data.image_label_list_of_masks_collate_function)
     validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
