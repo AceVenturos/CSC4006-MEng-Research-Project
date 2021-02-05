@@ -55,8 +55,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from models import Generator, Discriminator, VGG16
+from models import Generator, Discriminator, DiscriminatorAuxRotation, VGG16
 from model_wrapper import ModelWrapper
+from aux_rotation_model_wrapper import AuxRotationModelWrapper
 import data
 
 if __name__ == '__main__':
@@ -118,10 +119,26 @@ if __name__ == '__main__':
                                  validation_dataset_fid=validation_dataset_fid,
                                  generator_optimizer=generator_optimizer,
                                  discriminator_optimizer=discriminator_optimizer)
+
+    discriminator2 = DiscriminatorAuxRotation(channel_factor=args.channel_factor)
+    aux_rotation_model_wrapper = AuxRotationModelWrapper(generator=generator,
+                                                         discriminator=discriminator2,
+                                                         vgg16=vgg16,
+                                                         training_dataset=training_dataset,
+                                                         validation_dataset=validation_dataset,
+                                                         validation_dataset_fid=validation_dataset_fid,
+                                                         generator_optimizer=generator_optimizer,
+                                                         discriminator_optimizer=discriminator_optimizer,
+                                                         weight_rotation_loss_g=0.5,
+                                                         weight_rotation_loss_d=1.0)
+
     # Perform training
     if bool(args.train):
-        model_wrapper.train(epochs=args.epochs, device=args.device)
+        # model_wrapper.train(epochs=args.epochs, device=args.device)
+        aux_rotation_model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
     # Perform testing
     if bool(args.test):
-        print('FID=', model_wrapper.validate(device=args.device))
-        model_wrapper.inference(device=args.device)
+        print('FID=', aux_rotation_model_wrapper.validate(device=args.device))
+        aux_rotation_model_wrapper.inference(device=args.device)
+        # print('FID=', model_wrapper.validate(device=args.device))
+        # model_wrapper.inference(device=args.device)

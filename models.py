@@ -6,6 +6,8 @@ from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
 import torchvision
 
+
+
 upsamplingCount = 0
 # Updated upsamplingFlag to upsamplingCount to bypass a second upsampling layer - Jamie 25/01/17:51
 downsamplingCount = 0
@@ -121,7 +123,12 @@ class Discriminator(nn.Module):
     Discriminator network
     '''
 
-    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 365):
+    # Just seen I had number of classes still set to 365, will check if this effecting training - Jamie 04/02/21 10:17
+    # Note: Only affects spectral normalisation - Jamie 04/02/21 10:19
+    # Updated embeddings from 128 to 64 - Jamie 04/02/21 10:20
+    # Reverted to old settings, forgot to update channel size of main sequential block:
+    # TODO: will check if relevant at some stage - Jamie 05/02/2021 12:35
+    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 10):
         '''
         Constructor mehtod
         :param in_channels: (int) Number of input channels (grayscale = 1, rgb =3)
@@ -229,6 +236,99 @@ class Discriminator(nn.Module):
         output = self.classification(output)
         # print("Output size after classification: " + str(output.shape))
         return output + output_embedding
+
+
+class DiscriminatorAuxRotation(nn.Module):
+    '''
+    Discriminator w/Auxiliary Rotation task
+    '''
+    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 10):
+        '''
+        Constructor mehtod
+        :param in_channels: (int) Number of input channels (grayscale = 1, rgb =3)
+        :param channel_factor: (int, float) Channel factor to adopt the channel size in each layer
+        '''
+        # Call super constructor
+        super(DiscriminatorAuxRotation, self).__init__()
+        # Init layers
+        self.layers = nn.Sequential(
+            DiscriminatorResidualBlock(in_channels=in_channels, out_channels=int(32 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(32 // channel_factor),
+                                       out_channels=int(64 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(64 // channel_factor),
+                                       out_channels=int(128 // channel_factor)),
+            SelfAttention(channels=int(128 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor),
+                                       out_channels=int(128 // channel_factor)),
+            SelfAttention(channels=int(128 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor),
+                                       out_channels=int(128 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor),
+                                       out_channels=int(128 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor),
+                                       out_channels=int(128 // channel_factor)),
+        )
+
+        # Init classification layer
+        self.classification = spectral_norm(
+            nn.Linear(in_features=int(128 // channel_factor) * 2 * 2, out_features=1, bias=True))
+        # self.classification = spectral_norm(
+        #     nn.Linear(in_features=int(256 // channel_factor) * 2 * 2, out_features=1, bias=True))
+        # Init embedding layer
+        self.embedding = spectral_norm(nn.Embedding(num_embeddings=number_of_classes,
+                                                    embedding_dim=int(128 // channel_factor) * 2 * 2))
+        # self.embedding = spectral_norm(nn.Embedding(num_embeddings=number_of_classes,
+        #                                             embedding_dim=int(256 // channel_factor) * 2 * 2))
+        self.embedding.weight.data.uniform_(-0.1, 0.1)
+
+        self.rotationClassification = spectral_norm(
+            nn.Linear(in_features=int(128 // channel_factor) * 2 * 2, out_features=4, bias=True))
+
+        self.softmax = nn.Softmax()
+
+    def forward(self, input: torch.Tensor, class_id: torch.Tensor) -> torch.Tensor:
+        '''
+        Forward pass
+        :param input: (torch.Tensor) Input image to be classified, real or fake. Image shape (batch size, 1 or 3, height, width)
+        :return: (torch.Tensor) Output prediction of shape (batch size, 1)
+        '''
+
+        global downsamplingCount
+        downsamplingCount = 0
+
+        # Main path
+        output = self.layers(input)
+
+        # Reshape output into two dimensions
+        output = output.flatten(start_dim=1)
+
+        # Perform embedding
+        output_embedding = self.embedding(class_id)
+        output_embedding = (output.unsqueeze(dim=1) * output_embedding).sum(dim=1)
+
+        # Classification path
+        output = self.classification(output)
+
+        return output + output_embedding
+
+    # Added due to the class embeddings in the previous foward method - Jamie 05/02/21 12:06
+    def aux_rotation_forward(self, input: torch.Tensor) -> torch.Tensor:
+        # Downsampling Count Reset
+        global downsamplingCount
+        downsamplingCount = 0
+
+        # Main Path
+        output = self.layers(input)
+
+        # Reshape output into two dimensions
+        output = output.flatten(start_dim=1)
+
+        # Aux Rotation Path - Jamie 04/02/21 10:45
+        aux_rot_logits = self.rotationClassification(output)
+        aux_rot_prob = self.softmax(aux_rot_logits)
+
+        # print("Output size after classification: " + str(output.shape))
+        return aux_rot_logits, aux_rot_prob
 
 
 class VGG16(nn.Module):

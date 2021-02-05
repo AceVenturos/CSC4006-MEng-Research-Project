@@ -9,7 +9,7 @@ import numpy as np
 from datetime import datetime
 import os
 
-from models import VGG16, Generator, Discriminator
+from models import VGG16, Generator, DiscriminatorAuxRotation
 from lossfunction import SemanticReconstructionLoss, DiversityLoss, LSGANGeneratorLoss, LSGANDiscriminatorLoss
 from data import image_label_list_of_masks_collate_function
 from frechet_inception_distance import frechet_inception_distance
@@ -17,20 +17,22 @@ from misc import Logger, get_masks_for_inference
 import misc
 
 
-class ModelWrapper(object):
+class AuxRotationModelWrapper(object):
     '''
     Model wrapper implements training, validation and inference of the whole adversarial architecture
     '''
 
     def __init__(self,
                  generator: Union[Generator, nn.DataParallel],
-                 discriminator: Union[Discriminator, nn.DataParallel],
+                 discriminator: Union[DiscriminatorAuxRotation, nn.DataParallel],
                  training_dataset: DataLoader,
                  validation_dataset: Dataset,
                  validation_dataset_fid: DataLoader,
                  vgg16: Union[VGG16, nn.DataParallel] = VGG16(),
                  generator_optimizer: torch.optim.Optimizer = None,
                  discriminator_optimizer: torch.optim.Optimizer = None,
+                 weight_rotation_loss_g: float = 0.5,
+                 weight_rotation_loss_d: float = 1.0,
                  generator_loss: nn.Module = LSGANGeneratorLoss(),
                  discriminator_loss: nn.Module = LSGANDiscriminatorLoss(),
                  semantic_reconstruction_loss: nn.Module = SemanticReconstructionLoss(),
@@ -58,6 +60,8 @@ class ModelWrapper(object):
         self.vgg16 = vgg16
         self.generator_optimizer = generator_optimizer
         self.discriminator_optimizer = discriminator_optimizer
+        self.weight_rotation_loss_g = weight_rotation_loss_g
+        self.weight_rotation_loss_d = weight_rotation_loss_d
         self.generator_loss = generator_loss
         self.discriminator_loss = discriminator_loss
         self.semantic_reconstruction_loss = semantic_reconstruction_loss
@@ -105,11 +109,12 @@ class ModelWrapper(object):
         self.logger.hyperparameter['discriminator_loss'] = str(self.semantic_reconstruction_loss)
 
     # Updated to save models every 5 epochs - Jamie 04/02/21 11:55
-    def train(self, epochs: int = 20, validate_after_n_iterations: int = 100000, device: str = 'cuda',
-              save_model_after_n_epochs: int = 5, w_rec: float = 0.1, w_div: float = 0.1) -> None:
+    def train(self, epochs: int = 20, batch_size: int = 1028, validate_after_n_iterations: int = 100000,
+                device: str = 'cuda', save_model_after_n_epochs: int = 5, w_rec: float = 0.1, w_div: float = 0.1) -> None:
         """
         Training method
         :param epochs: (int) Number of epochs to perform
+        :param batch_size: (int) Batch size
         :param validate_after_n_iterations: (int) Number of iterations after the model gets validated
         :param device: (str) Device to be used
         :param save_model_after_n_epochs: (int) Epochs to perform after model gets saved
@@ -150,6 +155,8 @@ class ModelWrapper(object):
                 labels = labels.to(device)
                 for index in range(len(masks)):
                     masks[index] = masks[index].to(device)
+
+                # Training Discriminator
                 # Get features of images from vgg16 model
                 with torch.no_grad():
                     features_real = self.vgg16(images_real)
@@ -158,26 +165,82 @@ class ModelWrapper(object):
                                                dtype=torch.float32, device=device, requires_grad=True)
                     # Generate fake images
                     images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
-                # Discriminator prediction real
+
+                # Discriminator prediction real samples
                 prediction_real = self.discriminator(images_real, labels)
-                # Discriminator prediction fake
+                # Discriminator prediction generated fake samples
                 prediction_fake = self.discriminator(images_fake, labels)
                 # Get discriminator loss
                 loss_discriminator_real, loss_discriminator_fake = self.discriminator_loss(prediction_real,
                                                                                            prediction_fake)
+
+                # Rotate real images and train Discriminator per original paper
+                x = images_real
+                x_90 = x.transpose(2, 3)
+                x_180 = x.flip(2, 3)
+                x_270 = x.transpose(2, 3).flip(2, 3)
+                images_real = torch.cat((x, x_90, x_180, x_270), 0)
+
+                rot_labels_real = torch.zeros(4 * batch_size).cuda()
+                for i in range(4 * batch_size):
+                    if i < batch_size:
+                        rot_labels_real[i] = 0
+                    elif i < 2 * batch_size:
+                        rot_labels_real[i] = 1
+                    elif i < 3 * batch_size:
+                        rot_labels_real[i] = 2
+                    else:
+                        rot_labels_real[i] = 3
+
+                rot_logits, rot_pred = self.discriminator.aux_rotation_forward(images_real)
+
+                rot_labels = nn.functional.one_hot(rot_labels_real.to(torch.int64), 4).float()
+                d_rot_loss = torch.sum(nn.functional.binary_cross_entropy_with_logits(
+                    input=rot_logits,
+                    target=rot_labels))
+
                 # Calc gradients
-                (loss_discriminator_real + loss_discriminator_fake).backward()
+                (loss_discriminator_real + loss_discriminator_fake + (d_rot_loss * self.weight_rotation_loss_d)).backward()
                 # Optimize discriminator
                 self.discriminator_optimizer.step()
+
                 # Reset gradients of generator and discriminator
                 self.generator.zero_grad()
                 self.discriminator.zero_grad()
+
+                # Training Generator
                 # Generate new fake images
                 images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
                 # Discriminator prediction fake
                 prediction_fake = self.discriminator(images_fake, labels)
                 # Get generator loss
                 loss_generator = self.generator_loss(prediction_fake)
+
+                # Rotate images
+                x = images_fake
+                x_90 = x.transpose(2, 3)
+                x_180 = x.flip(2, 3)
+                x_270 = x.transpose(2, 3).flip(2, 3)
+                images_fake_rot = torch.cat((x, x_90, x_180, x_270), 0)
+
+                rot_labels_fake = torch.zeros(4 * batch_size).cuda()
+                for i in range(4 * batch_size):
+                    if i < batch_size:
+                        rot_labels_fake[i] = 0
+                    elif i < 2 * batch_size:
+                        rot_labels_fake[i] = 1
+                    elif i < 3 * batch_size:
+                        rot_labels_fake[i] = 2
+                    else:
+                        rot_labels_fake[i] = 3
+
+                rot_logits, rot_pred = self.discriminator.aux_rotation_forward(images_fake_rot)
+
+                rot_labels = nn.functional.one_hot(rot_labels_fake.to(torch.int64), 4).float()
+                g_rot_loss = torch.sum(nn.functional.binary_cross_entropy_with_logits(
+                    input=rot_logits,
+                    target=rot_labels))
+
                 # Get diversity loss
                 loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
                 # Get features of fake images
@@ -186,12 +249,14 @@ class ModelWrapper(object):
                 loss_generator_semantic_reconstruction = \
                     w_rec * self.semantic_reconstruction_loss(features_real, features_fake, masks)
                 # Calc complied loss
-                loss_generator_complied = loss_generator + loss_generator_semantic_reconstruction \
-                                          + loss_generator_diversity
+                loss_generator_complied = loss_generator + (self.weight_rotation_loss_g * g_rot_loss) + \
+                                          loss_generator_semantic_reconstruction + loss_generator_diversity
                 # Calc gradients
                 loss_generator_complied.backward()
                 # Optimize generator
                 self.generator_optimizer.step()
+
+
                 # Show losses in progress bar description
                 self.progress_bar.set_description(
                     'FID={:.4f}, Loss Div={:.4f}, Loss Rec={:.4f}, Loss G={:.4f}, Loss D={:.4f}'.format(
@@ -298,4 +363,5 @@ class ModelWrapper(object):
         torchvision.utils.save_image(
             misc.normalize_0_1_batch(fake_images),
             # Fixed date formatting for windows
-            os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))), nrow=7)
+            os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))),
+            nrow=7)
