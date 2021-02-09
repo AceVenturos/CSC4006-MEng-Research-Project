@@ -11,3 +11,5 @@ VGG16_retrain/vgg_places365.pt
 VGG16_retrain/VGG16_P1.pt
 
 *.pt
+
+runs/

@@ -134,11 +134,11 @@ if __name__ == '__main__':
 
     # Perform training
     if bool(args.train):
-        # model_wrapper.train(epochs=args.epochs, device=args.device)
-        aux_rotation_model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
+        model_wrapper.train(epochs=args.epochs, device=args.device)
+        #aux_rotation_model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
     # Perform testing
     if bool(args.test):
-        print('FID=', aux_rotation_model_wrapper.validate(device=args.device))
-        aux_rotation_model_wrapper.inference(device=args.device)
-        # print('FID=', model_wrapper.validate(device=args.device))
-        # model_wrapper.inference(device=args.device)
+        #print('FID=', aux_rotation_model_wrapper.validate(device=args.device))
+        #aux_rotation_model_wrapper.inference(device=args.device)
+        print('FID=', model_wrapper.validate(device=args.device))
+        model_wrapper.inference(device=args.device)

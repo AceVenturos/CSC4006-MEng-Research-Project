@@ -4,6 +4,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 import torchvision
+
+# Implementing tensorboard to help monitor training/testing - Jamie 08/02 23:24
+from torch.utils.tensorboard import SummaryWriter
+
+# "Writer will output to ./runs/ directory by default" per PyTorch documentation - Jamie 08/02 23:24
+writer = SummaryWriter()
+
 from tqdm import tqdm
 import numpy as np
 from datetime import datetime
@@ -137,9 +144,15 @@ class ModelWrapper(object):
         self.progress_bar.set_description('Validation')
         self.inference(device=device)
         fid = self.validate(device=device)
+
+        self.step_num = 0
+
         # Main loop
         for epoch in range(epochs):
             for images_real, labels, masks in self.training_dataset:
+                # Track number of steps - Jamie 07/02 14:56
+                self.step_num += 1
+
                 # Update progress bar with batch size
                 self.progress_bar.update(n=images_real.shape[0])
                 # Reset gradients
@@ -169,29 +182,33 @@ class ModelWrapper(object):
                 (loss_discriminator_real + loss_discriminator_fake).backward()
                 # Optimize discriminator
                 self.discriminator_optimizer.step()
-                # Reset gradients of generator and discriminator
-                self.generator.zero_grad()
-                self.discriminator.zero_grad()
-                # Generate new fake images
-                images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
-                # Discriminator prediction fake
-                prediction_fake = self.discriminator(images_fake, labels)
-                # Get generator loss
-                loss_generator = self.generator_loss(prediction_fake)
-                # Get diversity loss
-                loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
-                # Get features of fake images
-                features_fake = self.vgg16(images_fake)
-                # Calc semantic reconstruction loss
-                loss_generator_semantic_reconstruction = \
-                    w_rec * self.semantic_reconstruction_loss(features_real, features_fake, masks)
-                # Calc complied loss
-                loss_generator_complied = loss_generator + loss_generator_semantic_reconstruction \
-                                          + loss_generator_diversity
-                # Calc gradients
-                loss_generator_complied.backward()
-                # Optimize generator
-                self.generator_optimizer.step()
+
+                # Train generator twice
+                for i in range(2):
+                    # Reset gradients of generator and discriminator
+                    self.generator.zero_grad()
+                    self.discriminator.zero_grad()
+                    # Generate new fake images
+                    images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
+                    # Discriminator prediction fake
+                    prediction_fake = self.discriminator(images_fake, labels)
+                    # Get generator loss
+                    loss_generator = self.generator_loss(prediction_fake)
+                    # Get diversity loss
+                    loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
+                    # Get features of fake images
+                    features_fake = self.vgg16(images_fake)
+                    # Calc semantic reconstruction loss
+                    loss_generator_semantic_reconstruction = \
+                        w_rec * self.semantic_reconstruction_loss(features_real, features_fake, masks)
+                    # Calc complied loss
+                    loss_generator_complied = loss_generator + loss_generator_semantic_reconstruction \
+                                              + loss_generator_diversity
+                    # Calc gradients
+                    loss_generator_complied.backward()
+                    # Optimize generator
+                    self.generator_optimizer.step()
+
                 # Show losses in progress bar description
                 self.progress_bar.set_description(
                     'FID={:.4f}, Loss Div={:.4f}, Loss Rec={:.4f}, Loss G={:.4f}, Loss D={:.4f}'.format(
@@ -206,6 +223,42 @@ class ModelWrapper(object):
                 self.logger.log(metric_name='loss_generator_diversity', value=loss_generator_diversity.item())
                 self.logger.log(metric_name='iterations', value=self.progress_bar.n)
                 self.logger.log(metric_name='epoch', value=epoch)
+
+                writer.add_scalar("G Loss / train", loss_generator_complied, self.step_num)
+                writer.add_scalar("D Loss / train", loss_discriminator_fake + loss_discriminator_real, self.step_num)
+
+                if self.step_num % 50 == 0:
+                    with torch.no_grad():
+                        # Generator into eval mode
+                        self.generator.eval()
+                        # Get random images form validation dataset
+                        images = [self.validation_dataset[index].unsqueeze(dim=0).to(device) for index in
+                                  np.random.choice(range(len(self.validation_dataset)), replace=False, size=7)]
+                        # Get list of masks for different layers
+                        masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in
+                                        range(7)]
+                        # Init tensor of fake images to store all fake images
+                        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
+                                                  dtype=torch.float32, device=device)
+                        # Init counter
+                        counter = 0
+                        # Loop over all image and masks
+                        for image in images:
+                            for masks in masks_levels:
+                                # Generate fake images
+                                fake_image = self.generator(
+                                    input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
+                                    features=self.vgg16(image),
+                                    masks=masks)
+                                # Save fake images
+                                fake_images[counter] = fake_image.squeeze(dim=0)
+                                # Increment counter
+                                counter += 1
+                        # Save tensor as image
+                        grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
+                        writer.add_image('Generated Images', grid_images,
+                                         global_step=self.step_num)
+
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:
                     self.progress_bar.set_description('Validation')
