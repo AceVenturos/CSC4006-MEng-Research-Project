@@ -212,7 +212,8 @@ class AuxRotationModelWrapper(object):
                     target=rot_labels))
 
                 # Calc gradients
-                (loss_discriminator_real + loss_discriminator_fake + (d_rot_loss * self.weight_rotation_loss_d)).backward()
+                d_tot_loss = loss_discriminator_real + loss_discriminator_fake - (d_rot_loss * self.weight_rotation_loss_d)
+                d_tot_loss.backward()
                 # Optimize discriminator
                 self.discriminator_optimizer.step()
 
@@ -284,8 +285,16 @@ class AuxRotationModelWrapper(object):
                 self.logger.log(metric_name='iterations', value=self.progress_bar.n)
                 self.logger.log(metric_name='epoch', value=epoch)
 
-                writer.add_scalar("G Loss / train", loss_generator_complied, self.step_num)
-                writer.add_scalar("D Loss / train", loss_discriminator_fake + loss_discriminator_real, self.step_num)
+                writer.add_scalar("G Tot Loss / train", loss_generator_complied, self.step_num)
+                writer.add_scalar("G Adv Loss / train", loss_generator, self.step_num)
+                writer.add_scalar("G Rec Loss / train", loss_generator_semantic_reconstruction, self.step_num)
+                writer.add_scalar("G Div Loss / train", loss_generator_diversity, self.step_num)
+                writer.add_scalar("G Rot Loss / train", self.weight_rotation_loss_g * g_rot_loss, self.step_num)
+
+                writer.add_scalar("D Tot Loss / train", d_tot_loss, self.step_num)
+                writer.add_scalar("D Adv Loss / train", loss_discriminator_fake + loss_discriminator_real, self.step_num)
+                writer.add_scalar("D Rot Loss / train", d_rot_loss * self.weight_rotation_loss_d, self.step_num)
+
 
                 if self.step_num % 50 == 0:
                     with torch.no_grad():
@@ -318,6 +327,8 @@ class AuxRotationModelWrapper(object):
                         grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
                         writer.add_image('Generated Images', grid_images,
                                          global_step=self.step_num)
+                        # Generator back into train mode
+                        self.generator.train()
 
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:

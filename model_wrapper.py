@@ -183,31 +183,29 @@ class ModelWrapper(object):
                 # Optimize discriminator
                 self.discriminator_optimizer.step()
 
-                # Train generator twice
-                for i in range(2):
-                    # Reset gradients of generator and discriminator
-                    self.generator.zero_grad()
-                    self.discriminator.zero_grad()
-                    # Generate new fake images
-                    images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
-                    # Discriminator prediction fake
-                    prediction_fake = self.discriminator(images_fake, labels)
-                    # Get generator loss
-                    loss_generator = self.generator_loss(prediction_fake)
-                    # Get diversity loss
-                    loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
-                    # Get features of fake images
-                    features_fake = self.vgg16(images_fake)
-                    # Calc semantic reconstruction loss
-                    loss_generator_semantic_reconstruction = \
-                        w_rec * self.semantic_reconstruction_loss(features_real, features_fake, masks)
-                    # Calc complied loss
-                    loss_generator_complied = loss_generator + loss_generator_semantic_reconstruction \
-                                              + loss_generator_diversity
-                    # Calc gradients
-                    loss_generator_complied.backward()
-                    # Optimize generator
-                    self.generator_optimizer.step()
+                # Reset gradients of generator and discriminator
+                self.generator.zero_grad()
+                self.discriminator.zero_grad()
+                # Generate new fake images
+                images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
+                # Discriminator prediction fake
+                prediction_fake = self.discriminator(images_fake, labels)
+                # Get generator loss
+                loss_generator = self.generator_loss(prediction_fake)
+                # Get diversity loss
+                loss_generator_diversity = w_div * self.diversity_loss(images_fake, noise_vector)
+                # Get features of fake images
+                features_fake = self.vgg16(images_fake)
+                # Calc semantic reconstruction loss
+                loss_generator_semantic_reconstruction = \
+                    w_rec * self.semantic_reconstruction_loss(features_real, features_fake, masks)
+                # Calc complied loss
+                loss_generator_complied = loss_generator + loss_generator_semantic_reconstruction \
+                                          + loss_generator_diversity
+                # Calc gradients
+                loss_generator_complied.backward()
+                # Optimize generator
+                self.generator_optimizer.step()
 
                 # Show losses in progress bar description
                 self.progress_bar.set_description(
@@ -254,10 +252,13 @@ class ModelWrapper(object):
                                 fake_images[counter] = fake_image.squeeze(dim=0)
                                 # Increment counter
                                 counter += 1
+
                         # Save tensor as image
                         grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
                         writer.add_image('Generated Images', grid_images,
                                          global_step=self.step_num)
+                        # Generator back into train mode
+                        self.generator.train()
 
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:
