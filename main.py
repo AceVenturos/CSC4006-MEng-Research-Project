@@ -45,6 +45,10 @@ parser.add_argument('--path_to_places365', type=str, default='../Training Data/p
 parser.add_argument('--epochs', type=int, default=50,
                     help='Epochs to perform while training (default=100)')
 
+parser.add_argument('--model_wrapper', type=int, default=0,
+                    help='Select a valid model wrapper option:\n\t0: Original SGP'
+                         '\n\t1: Self-Supervised SGP w/ Aux Rotation')
+
 args = parser.parse_args()
 
 import os
@@ -54,7 +58,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus_to_use
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-
 from models import Generator, Discriminator, DiscriminatorAuxRotation, VGG16
 from model_wrapper import ModelWrapper
 from aux_rotation_model_wrapper import AuxRotationModelWrapper
@@ -96,11 +99,7 @@ if __name__ == '__main__':
         batch_size=args.batch_size, num_workers=2, shuffle=True, drop_last=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
 
-    # 50,000 divisible by 32, 64 and 128 produce irrational numbers -> doesn't explain issues for 2, 8 and
-    # 16 - Jamie 27/01/12:22
-    # print(len(training_dataset.dataset))
-    # exit(0)
-    # Changed max_length from 6000 to 200 - Jamie
+    # Changed max_length from 6000 to 200 - Jamie TODO: Find optimal max_length value
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
                        max_length=200, validation=True),
@@ -109,36 +108,46 @@ if __name__ == '__main__':
     validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
                                         test=True)
 
-    print(training_dataset.__len__())
-    # Init model wrapper
-    model_wrapper = ModelWrapper(generator=generator,
-                                 discriminator=discriminator,
-                                 vgg16=vgg16,
-                                 training_dataset=training_dataset,
-                                 validation_dataset=validation_dataset,
-                                 validation_dataset_fid=validation_dataset_fid,
-                                 generator_optimizer=generator_optimizer,
-                                 discriminator_optimizer=discriminator_optimizer)
+    # Initialises chosen model wrapper for training - Jamie 12/02 15:06
+    if args.model_wrapper == 0:
+        model_wrapper = ModelWrapper(generator=generator,
+                                     discriminator=discriminator,
+                                     vgg16=vgg16,
+                                     training_dataset=training_dataset,
+                                     validation_dataset=validation_dataset,
+                                     validation_dataset_fid=validation_dataset_fid,
+                                     generator_optimizer=generator_optimizer,
+                                     discriminator_optimizer=discriminator_optimizer)
+    elif args.model_wrapper == 1:
+        discriminator2 = DiscriminatorAuxRotation(channel_factor=args.channel_factor)
+        model_wrapper = AuxRotationModelWrapper(generator=generator,
+                                                discriminator=discriminator2,
+                                                vgg16=vgg16,
+                                                training_dataset=training_dataset,
+                                                validation_dataset=validation_dataset,
+                                                validation_dataset_fid=validation_dataset_fid,
+                                                generator_optimizer=generator_optimizer,
+                                                discriminator_optimizer=discriminator_optimizer,
+                                                weight_rotation_loss_g=0.2,
+                                                weight_rotation_loss_d=0.5)
+    else:
+        print("ERR: Select a valid model wrapper option:\n\t0: Original SGP\n\t1: Self-Supervised SGP w/ Aux Rotation")
+        exit(1)
 
-    discriminator2 = DiscriminatorAuxRotation(channel_factor=args.channel_factor)
-    aux_rotation_model_wrapper = AuxRotationModelWrapper(generator=generator,
-                                                         discriminator=discriminator2,
-                                                         vgg16=vgg16,
-                                                         training_dataset=training_dataset,
-                                                         validation_dataset=validation_dataset,
-                                                         validation_dataset_fid=validation_dataset_fid,
-                                                         generator_optimizer=generator_optimizer,
-                                                         discriminator_optimizer=discriminator_optimizer,
-                                                         weight_rotation_loss_g=0.2,
-                                                         weight_rotation_loss_d=0.5)
-
-    # Perform training
+    # Performs training - TODO: Update one of the wrappers so I can get rid of unnecessary if statement
     if bool(args.train):
-        # model_wrapper.train(epochs=args.epochs, device=args.device)
-        aux_rotation_model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
+        if args.model_wrapper == 0:
+            # Testing - Jamie 12/02 15:19
+            # print("Here 0")
+            # exit(0)
+            model_wrapper.train(epochs=args.epochs, device=args.device)
+        elif args.model_wrapper == 1:
+            # Testing - Jamie 12/02 15:19
+            # print("Here 1")
+            # exit(0)
+            model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
+
     # Perform testing
     if bool(args.test):
-        print('FID=', aux_rotation_model_wrapper.validate(device=args.device))
-        aux_rotation_model_wrapper.inference(device=args.device)
-        # print('FID=', model_wrapper.validate(device=args.device))
-        # model_wrapper.inference(device=args.device)
+        print('FID=', model_wrapper.validate(device=args.device))
+        model_wrapper.inference(device=args.device)
