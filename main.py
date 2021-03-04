@@ -9,8 +9,8 @@ parser.add_argument('--train', type=int, default=1,
 parser.add_argument('--test', type=int, default=1,
                     help='Test network (default=1 (True)')
 
-parser.add_argument('--batch_size', type=int, default=20,
-                    help='Batch size of the training and test set (default=20)')
+parser.add_argument('--batch_size', type=int, default=32,
+                    help='Batch size of the training and test set (default=32)')
 
 parser.add_argument('--lr', type=float, default=1e-04,
                     help='Main learning rate of the adam optimizer (default=1e-04)')
@@ -35,11 +35,11 @@ parser.add_argument('--load_discriminator_network', type=str, default=None,
 
 # Updated to retrained classifier Jamie 24/01 08:57
 # Updated after correctly saving classifier model as model file and not state dict - Jamie 24/01 09:19
-parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10.pt',
+parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10_50ep.pt',
                     help='Name of the pretrained (places365) vgg16 network the be loaded from model file (.pt)')
 
 # Updated to new training data - Jamie 24/01 08:57
-parser.add_argument('--path_to_places365', type=str, default='../Training Data/places365_standard10',
+parser.add_argument('--path_to_places365', type=str, default='../Training Data/Places_Nature10',
                     help='Path to places365 dataset.')
 
 parser.add_argument('--epochs', type=int, default=50,
@@ -86,8 +86,9 @@ if __name__ == '__main__':
         vgg16 = nn.DataParallel(vgg16)
 
     # Init optimizers
-    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=args.lr)
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.1 * args.lr)
+    adam_betas = (0.5, 0.9)
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05, betas=adam_betas)
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-06, betas=adam_betas)
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
@@ -100,9 +101,10 @@ if __name__ == '__main__':
         collate_fn=data.image_label_list_of_masks_collate_function)
 
     # Changed max_length from 6000 to 200 - Jamie TODO: Find optimal max_length value
+    # Back to 50, believe this is causing an error i.e. CUDA out of memory
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                       max_length=200, validation=True),
+                       max_length=50, validation=True),
         batch_size=args.batch_size, num_workers=2, shuffle=False,
         collate_fn=data.image_label_list_of_masks_collate_function)
     validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
@@ -140,7 +142,7 @@ if __name__ == '__main__':
             # Testing - Jamie 12/02 15:19
             # print("Here 0")
             # exit(0)
-            model_wrapper.train(epochs=args.epochs, device=args.device)
+            model_wrapper.train(epochs=args.epochs, device=args.device, w_rec=0.5)
         elif args.model_wrapper == 1:
             # Testing - Jamie 12/02 15:19
             # print("Here 1")

@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
-import numpy as np
 import torchvision
 from torchvision import datasets, models, transforms
 import matplotlib.pyplot as plt
@@ -22,7 +21,7 @@ if use_gpu:
 # https://www.kaggle.com/carloalbertobarbano/vgg16-transfer-learning-pytorch
 # https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
 
-data_dir = '../../Training Data/places365_standard10VGG16/'
+data_dir = '../../Training Data/Places_Nature10vgg16/'
 TRAIN = 'train'
 VAL = 'val'
 TEST = 'test'
@@ -51,7 +50,7 @@ image_datasets = {
 
 dataloaders = {
     x: torch.utils.data.DataLoader(
-        image_datasets[x], batch_size=10,
+        image_datasets[x], batch_size=32,
         shuffle=True, num_workers=0
     )
     for x in [TRAIN, VAL, TEST]
@@ -86,7 +85,7 @@ inputs, classes = next(iter(dataloaders[TRAIN]))
 show_databatch(inputs, classes)
 
 
-def visualize_model(vgg, num_images=6):
+def visualize_model(vgg, num_images=8):
     was_training = vgg.training
 
     # Set model for evaluation
@@ -187,12 +186,12 @@ print(vgg16)
 del vgg16.features.pool5
 print(vgg16)
 
-# If you want to train the model for more than 2 epochs, set this to True after the first run
-resume_training = False
+# If you want to train the model for more than 10 epochs, set this to True after the first run
+resume_training = True
 
 if resume_training:
     print("Loading pretrained model..")
-    vgg16.load_state_dict(torch.load('VGG16_P10.pt'))
+    vgg16 = torch.load('VGG16_P10_40ep.pt')
     print("Loaded!")
 
 if use_gpu:
@@ -229,7 +228,7 @@ def train_model(vgg, criterion, optimizer, scheduler, num_epochs=10):
         vgg.train(True)
 
         for i, data in enumerate(dataloaders[TRAIN]):
-            if i % 100 == 0:
+            if i % 25 == 0:
                 print("\rTraining batch {}/{}".format(i, train_batches / 2), end='', flush=True)
 
             # Use half training dataset
@@ -319,8 +318,12 @@ def train_model(vgg, criterion, optimizer, scheduler, num_epochs=10):
 print("Test before training")
 eval_model(vgg16, criterion)
 
+
 vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
-torch.save(vgg16, 'VGG16_P10.pt')
+torch.save(vgg16, 'VGG16_P10_50ep.pt')
+
+print("Test before training")
+eval_model(vgg16, criterion)
 
 eval_model(vgg16, criterion)
 

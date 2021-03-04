@@ -6,10 +6,11 @@ from torch.utils.data import DataLoader, Dataset
 import torchvision
 
 # Implementing tensorboard to help monitor training/testing - Jamie 08/02 23:24
-from torch.utils.tensorboard import SummaryWriter
-
-# "Writer will output to ./runs/ directory by default" per PyTorch documentation - Jamie 08/02 23:24
-writer = SummaryWriter()
+# from torch.utils.tensorboard import SummaryWriter
+#
+# # "Writer will output to ./runs/ directory by default" per PyTorch documentation - Jamie 08/02 23:24
+# writer1 = SummaryWriter('runs/testName/Loss')
+# writer2 = SummaryWriter('runs/testName/Images')
 
 from tqdm import tqdm
 import numpy as np
@@ -111,8 +112,12 @@ class ModelWrapper(object):
         self.logger.hyperparameter['diversity_loss'] = str(self.diversity_loss)
         self.logger.hyperparameter['discriminator_loss'] = str(self.semantic_reconstruction_loss)
 
+        # Jamie 22/02/21
+        self.step_num = 0
+
     # Updated to save models every 5 epochs - Jamie 04/02/21 11:55
-    def train(self, epochs: int = 20, validate_after_n_iterations: int = 100000, device: str = 'cuda',
+    # Updated to be validated 5 times per epoch - Jamie 21/02/21 21:26
+    def train(self, epochs: int = 20, validate_after_n_iterations: int = 10000, device: str = 'cuda',
               save_model_after_n_epochs: int = 5, w_rec: float = 0.1, w_div: float = 0.1) -> None:
         """
         Training method
@@ -145,11 +150,10 @@ class ModelWrapper(object):
         self.inference(device=device)
         fid = self.validate(device=device)
 
-        self.step_num = 0
-
         # Main loop
         for epoch in range(epochs):
             for images_real, labels, masks in self.training_dataset:
+                torch.cuda.empty_cache()
                 # Track number of steps - Jamie 07/02 14:56
                 self.step_num += 1
 
@@ -222,43 +226,8 @@ class ModelWrapper(object):
                 self.logger.log(metric_name='iterations', value=self.progress_bar.n)
                 self.logger.log(metric_name='epoch', value=epoch)
 
-                writer.add_scalar("G Loss / train", loss_generator_complied, self.step_num)
-                writer.add_scalar("D Loss / train", loss_discriminator_fake + loss_discriminator_real, self.step_num)
-
-                if self.step_num % 50 == 0:
-                    with torch.no_grad():
-                        # Generator into eval mode
-                        self.generator.eval()
-                        # Get random images form validation dataset
-                        images = [self.validation_dataset[index].unsqueeze(dim=0).to(device) for index in
-                                  np.random.choice(range(len(self.validation_dataset)), replace=False, size=7)]
-                        # Get list of masks for different layers
-                        masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in
-                                        range(7)]
-                        # Init tensor of fake images to store all fake images
-                        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
-                                                  dtype=torch.float32, device=device)
-                        # Init counter
-                        counter = 0
-                        # Loop over all image and masks
-                        for image in images:
-                            for masks in masks_levels:
-                                # Generate fake images
-                                fake_image = self.generator(
-                                    input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
-                                    features=self.vgg16(image),
-                                    masks=masks)
-                                # Save fake images
-                                fake_images[counter] = fake_image.squeeze(dim=0)
-                                # Increment counter
-                                counter += 1
-
-                        # Save tensor as image
-                        grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
-                        writer.add_image('Generated Images', grid_images,
-                                         global_step=self.step_num)
-                        # Generator back into train mode
-                        self.generator.train()
+                # writer1.add_scalar("G Loss / train", loss_generator_complied, self.step_num)
+                # writer1.add_scalar("D Loss / train", loss_discriminator_fake + loss_discriminator_real, self.step_num)
 
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:
@@ -353,3 +322,7 @@ class ModelWrapper(object):
             misc.normalize_0_1_batch(fake_images),
             # Fixed date formatting for windows
             os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))), nrow=7)
+        # Image for tensor board
+        # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
+        # writer2.add_image('Generated Images', grid_images, global_step=self.step_num)
+
