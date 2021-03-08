@@ -49,6 +49,10 @@ parser.add_argument('--model_wrapper', type=int, default=0,
                     help='Select a valid model wrapper option:\n\t0: Original SGP'
                          '\n\t1: Self-Supervised SGP w/ Aux Rotation')
 
+parser.add_argument('--visualise', type=int, default=0,
+                    help='Select a valid option:\n\t0: Skip Visualisation'
+                         '\n\t1: Perform Visualisation')
+
 args = parser.parse_args()
 
 import os
@@ -87,8 +91,8 @@ if __name__ == '__main__':
 
     # Init optimizers
     adam_betas = (0.5, 0.9)
-    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05, betas=adam_betas)
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-06, betas=adam_betas)
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05)#, betas=adam_betas)
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-06)#, betas=adam_betas)
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
@@ -142,7 +146,7 @@ if __name__ == '__main__':
             # Testing - Jamie 12/02 15:19
             # print("Here 0")
             # exit(0)
-            model_wrapper.train(epochs=args.epochs, device=args.device, w_rec=0.5)
+            model_wrapper.train(epochs=args.epochs, device=args.device)
         elif args.model_wrapper == 1:
             # Testing - Jamie 12/02 15:19
             # print("Here 1")

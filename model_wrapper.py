@@ -255,6 +255,7 @@ class ModelWrapper(object):
         :param plot: (bool) True if samples should be plotted
         :return: (float, float) IS and FID score
         '''
+        torch.cuda.empty_cache()
         # Generator into validation mode
         self.generator.eval()
         self.vgg16.eval()
