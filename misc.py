@@ -51,9 +51,13 @@ def get_masks_for_training(
                 masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
         # Random mask cases
         elif index > selected_layer and random_mask is None:
+            spatial_varying_masks = np.random.rand() < p_random_mask
+            #intial code always assumes if length(mask_shape) not >2 then mask would be randomly generated, this would
+            # only ever apply to the 1st FC layer but updated to check to make layer non-random if the spatial probability
+            # doens't say too.
             if len(mask_shape) > 2:
                 # Get random mask
-                if np.random.rand() < p_random_mask:
+                if spatial_varying_masks:
                     random_mask_used = True
                     random_mask = random_shapes(mask_shape[1:],
                                                 min_shapes=1,
@@ -66,18 +70,29 @@ def get_masks_for_training(
                     random_mask = (random_mask == 255.0).float()
                 else:
                     # Make no mask
-                    random_mask = torch.ones(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :]
+                    # From paper "In our default training step, we randomly select a pyramid level, and feed to the
+                    # generator only the features at that level, while masking out the features in all other levels"
+                    random_mask = torch.zeros(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :]
                 # Save mask to list
                 masks.append(random_mask)
             else:
-                # Save mask to list
-                masks.append(torch.randint(low=0, high=2, size=mask_shape, dtype=torch.float32, device=device))
+                if spatial_varying_masks:
+                    # Save mask to list
+                    # Was initially skeptical here but I realise this is done like this for 1D layers as spatial mask can't
+                    # be upsampled from here.
+                    masks.append(torch.randint(low=0, high=2, size=mask_shape, dtype=torch.float32, device=device))
+                else:
+                    random_mask = torch.zeros(mask_shape, dtype=torch.float32, device=device)
+                    masks.append(random_mask)
+
         else:
             # Save mask to list
             if random_mask_used:
                 masks.append(F.upsample_nearest(random_mask[None, :, :, :], size=mask_shape[1:]).float().to(device)[0])
             else:
-                masks.append(torch.ones(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :])
+                # From paper "In our default training step, we randomly select a pyramid level, and feed to the
+                # generator only the features at that level, while masking out the features in all other levels"
+                masks.append(torch.zeros(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :])
     # Add batch size dimension
     if add_batch_size:
         for index in range(len(masks)):

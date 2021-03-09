@@ -56,11 +56,11 @@ for layer in features:
 plt.figure(figsize=(50, 10))
 layer_visual = features[0][0]
 for i, filter in enumerate(layer_visual):
-    if i == 32:
+    if i == 64:
         break
     filter = filter.cpu()
     filter = filter.detach().numpy()
-    plt.subplot(4, 8, i + 1)
+    plt.subplot(8, 8, i + 1)
     plt.imshow(filter)
     plt.axis("off")
 
@@ -99,7 +99,5 @@ for i, filter in enumerate(layer_visual):
     plt.subplot(2, 8, i + 1)
     plt.imshow(filter)
     plt.axis("off")
-
-plt.show()
 
 plt.show()

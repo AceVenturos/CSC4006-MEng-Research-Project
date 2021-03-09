@@ -91,8 +91,8 @@ if __name__ == '__main__':
 
     # Init optimizers
     adam_betas = (0.5, 0.9)
-    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05)#, betas=adam_betas)
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-06)#, betas=adam_betas)
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-04)#, betas=adam_betas)
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-05)#, betas=adam_betas)
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
