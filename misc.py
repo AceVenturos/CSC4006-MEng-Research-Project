@@ -32,6 +32,7 @@ def get_masks_for_training(
     masks = []
     random_mask = None
     random_mask_used = False
+    spatial_varying_masks = np.random.rand() < p_random_mask
     for index, mask_shape in enumerate(reversed(mask_shapes)):
         # Full mask on case
         if index < selected_layer:
@@ -51,7 +52,6 @@ def get_masks_for_training(
                 masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
         # Random mask cases
         elif index > selected_layer and random_mask is None:
-            spatial_varying_masks = np.random.rand() < p_random_mask
             #intial code always assumes if length(mask_shape) not >2 then mask would be randomly generated, this would
             # only ever apply to the 1st FC layer but updated to check to make layer non-random if the spatial probability
             # doens't say too.
@@ -82,9 +82,9 @@ def get_masks_for_training(
                     # be upsampled from here.
                     masks.append(torch.randint(low=0, high=2, size=mask_shape, dtype=torch.float32, device=device))
                 else:
+                    # Added as 'random mask' so the is elif block won't be hit again
                     random_mask = torch.zeros(mask_shape, dtype=torch.float32, device=device)
                     masks.append(random_mask)
-
         else:
             # Save mask to list
             if random_mask_used:
