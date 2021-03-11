@@ -117,7 +117,8 @@ class ModelWrapper(object):
 
     # Updated to save models every 5 epochs - Jamie 04/02/21 11:55
     # Updated to be validated 5 times per epoch - Jamie 21/02/21 21:26
-    def train(self, epochs: int = 20, validate_after_n_iterations: int = 10000, device: str = 'cuda',
+    # Temp upped calidate uo to 50000 for testing purpoawa
+    def train(self, epochs: int = 20, validate_after_n_iterations: int = 50000, device: str = 'cuda',
               save_model_after_n_epochs: int = 5, w_rec: float = 0.1, w_div: float = 0.1) -> None:
         """
         Training method

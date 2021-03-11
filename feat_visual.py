@@ -101,5 +101,3 @@ for i, filter in enumerate(layer_visual):
     plt.axis("off")
 
 plt.show()
-
-plt.show()
