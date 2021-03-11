@@ -41,12 +41,12 @@ modelVGG = models.VGG16(path_to_pre_trained_model="./pre_trained_models/VGG16_P1
 print(modelVGG)
 
 inputs, classes, masks = next(iter(training_dataset))
+plt.imshow(inputs.permute(0,2,3,1).detach().numpy()[0])
 modelVGG.eval()
 modelVGG.to('cuda')
 inputs = inputs.to('cuda')
 
 features = modelVGG(inputs)
-
 
 
 for layer in features:
@@ -56,11 +56,11 @@ for layer in features:
 plt.figure(figsize=(50, 10))
 layer_visual = features[0][0]
 for i, filter in enumerate(layer_visual):
-    if i == 32:
+    if i == 64:
         break
     filter = filter.cpu()
     filter = filter.detach().numpy()
-    plt.subplot(4, 8, i + 1)
+    plt.subplot(8, 8, i + 1)
     plt.imshow(filter)
     plt.axis("off")
 
@@ -68,11 +68,11 @@ plt.show()
 
 layer_visual = features[1][0]
 for i, filter in enumerate(layer_visual):
-    if i == 16:
+    if i == 128:
         break
     filter = filter.cpu()
     filter = filter.detach().numpy()
-    plt.subplot(2, 8, i + 1)
+    plt.subplot(8, 16, i + 1)
     plt.imshow(filter)
     plt.axis("off")
 
@@ -80,11 +80,11 @@ plt.show()
 
 layer_visual = features[2][0]
 for i, filter in enumerate(layer_visual):
-    if i == 16:
+    if i == 256:
         break
     filter = filter.cpu()
     filter = filter.detach().numpy()
-    plt.subplot(2, 8, i + 1)
+    plt.subplot(16, 16, i + 1)
     plt.imshow(filter)
     plt.axis("off")
 
