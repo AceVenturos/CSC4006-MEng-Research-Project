@@ -72,6 +72,9 @@ class ModelWrapper(object):
         self.diversity_loss = diversity_loss
         self.latent_dimensions = self.generator.module.latent_dimensions \
             if isinstance(self.generator, nn.DataParallel) else self.generator.latent_dimensions
+        # Calc no gradients for weights of vgg16
+        for parameter in self.vgg16.parameters():
+            parameter.requires_grad = False
         # Init logger
         self.logger = Logger()
         # Make directories to save logs, plots and models during training
@@ -90,7 +93,8 @@ class ModelWrapper(object):
         # Make indexes for validation plots
         validation_plot_indexes = np.random.choice(range(len(self.validation_dataset_fid.dataset)), 49, replace=False)
         # Plot and save validation images used to plot generated images
-        self.validation_images_to_plot, _, self.validation_masks = image_label_list_of_masks_collate_function(
+        self.validation_images_to_plot, self.validation_labels, self.validation_masks \
+            = image_label_list_of_masks_collate_function(
             [self.validation_dataset_fid.dataset[index] for index in validation_plot_indexes])
 
         torchvision.utils.save_image(misc.normalize_0_1_batch(self.validation_images_to_plot),
@@ -155,6 +159,7 @@ class ModelWrapper(object):
         for epoch in range(epochs):
             for images_real, labels, masks in self.training_dataset:
                 torch.cuda.empty_cache()
+                ############ Discriminator training ############
                 # Track number of steps - Jamie 07/02 14:56
                 self.step_num += 1
 
@@ -175,7 +180,8 @@ class ModelWrapper(object):
                     noise_vector = torch.randn((images_real.shape[0], self.latent_dimensions),
                                                dtype=torch.float32, device=device, requires_grad=True)
                     # Generate fake images
-                    images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
+                    images_fake = self.generator(input=noise_vector, features=features_real, masks=masks,
+                                                 class_id=labels.float())
                 # Discriminator prediction real
                 prediction_real = self.discriminator(images_real, labels)
                 # Discriminator prediction fake
@@ -188,11 +194,16 @@ class ModelWrapper(object):
                 # Optimize discriminator
                 self.discriminator_optimizer.step()
 
+                ############ Generator training ############
                 # Reset gradients of generator and discriminator
                 self.generator.zero_grad()
                 self.discriminator.zero_grad()
+                # Init new noise vector
+                noise_vector = torch.randn((images_real.shape[0], self.latent_dimensions),
+                                           dtype=torch.float32, device=device, requires_grad=True)
                 # Generate new fake images
-                images_fake = self.generator(input=noise_vector, features=features_real, masks=masks)
+                images_fake = self.generator(input=noise_vector, features=features_real, masks=masks,
+                                             class_id=labels.float())
                 # Discriminator prediction fake
                 prediction_fake = self.discriminator(images_fake, labels)
                 # Get generator loss
@@ -268,7 +279,8 @@ class ModelWrapper(object):
         # Generate images
         fake_image = self.generator(input=self.validation_latents,
                                     features=self.vgg16(self.validation_images_to_plot),
-                                    masks=self.validation_masks).cpu()
+                                    masks=self.validation_masks,
+                                    class_id=self.validation_labels.float()).cpu()
         # Save images
         torchvision.utils.save_image(misc.normalize_0_1_batch(fake_image),
                                      os.path.join(self.path_save_plots, str(self.progress_bar.n) + '.png'),
@@ -289,17 +301,18 @@ class ModelWrapper(object):
         # Generator into eval mode
         self.generator.eval()
         # Get random images form validation dataset
-        images = [self.validation_dataset[index].unsqueeze(dim=0).to(device) for index in
-                  np.random.choice(range(len(self.validation_dataset)), replace=False, size=7)]
+        images, labels, _ = image_label_list_of_masks_collate_function(
+            [self.validation_dataset_fid.dataset[index] for index in
+             np.random.choice(range(len(self.validation_dataset_fid)), replace=False, size=7)])
         # Get list of masks for different layers
         masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in range(7)]
         # Init tensor of fake images to store all fake images
-        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
+        fake_images = torch.empty(7 ** 2, images.shape[1], images.shape[2], images.shape[3],
                                   dtype=torch.float32, device=device)
         # Init counter
         counter = 0
         # Loop over all image and masks
-        for image in images:
+        for image, label in zip(images, labels):
             for masks in masks_levels:
                 # Generate fake images
                 # feature maps being produced currently output different sizes for different images i.e. first tensor in
@@ -311,10 +324,11 @@ class ModelWrapper(object):
                 # for item in listBoi:
                 #     print(item.shape)
 
-                fake_image = self.generator(
+                fake_image = self.generator.module(
                     input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
                     features=self.vgg16(image),
-                    masks=masks)
+                    masks=masks,
+                    class_id=label.float())
                 # Save fake images
                 fake_images[counter] = fake_image.squeeze(dim=0)
                 # Increment counter
@@ -324,6 +338,8 @@ class ModelWrapper(object):
             misc.normalize_0_1_batch(fake_images),
             # Fixed date formatting for windows
             os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))), nrow=7)
+        # Generator back into train mode
+        self.generator.train()
         # Image for tensor board
         # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
         # writer2.add_image('Generated Images', grid_images, global_step=self.step_num)

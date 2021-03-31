@@ -3,6 +3,7 @@ from typing import List, Tuple
 import torch
 import torch.nn.functional as F
 import numpy as np
+import random
 from skimage.draw import random_shapes
 import os
 import json
@@ -10,7 +11,7 @@ import json
 # Mask size set for training here - Jamie
 def get_masks_for_training(
         mask_shapes: List[Tuple] =
-        [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
+        [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
         #[(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
         #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
         # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
@@ -27,12 +28,12 @@ def get_masks_for_training(
     '''
     # Select layer where no masking is used. Every output from the deeper layers get mapped out. Every higher layer gets
     # masked by a random shape
-    selected_layer = np.random.choice(range(7))
+    selected_layer = random.choice(list(range(len(mask_shapes))) + [0, 1])
     # Make masks
     masks = []
     random_mask = None
     random_mask_used = False
-    spatial_varying_masks = np.random.rand() < p_random_mask
+    spatial_varying_masks = random.uniform(0, 1) < p_random_mask
     for index, mask_shape in enumerate(reversed(mask_shapes)):
         # Full mask on case
         if index < selected_layer:
@@ -92,7 +93,7 @@ def get_masks_for_training(
             else:
                 # From paper "In our default training step, we randomly select a pyramid level, and feed to the
                 # generator only the features at that level, while masking out the features in all other levels"
-                masks.append(torch.zeros(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :])
+                masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
     # Add batch size dimension
     if add_batch_size:
         for index in range(len(masks)):
@@ -103,18 +104,18 @@ def get_masks_for_training(
 
 # I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
 def get_masks_for_validation(mask_shapes: List[Tuple] =
-                            [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
+                            [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
                             # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
                             # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
                             # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
                             # Updated for 10 Classes - Jamie 25/01/21 17:03
                             device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
-    return get_masks_for_inference(layer_index_to_choose=np.random.choice(range(len(mask_shapes))),
+    return get_masks_for_inference(layer_index_to_choose=random.choice(range(len(mask_shapes))),
                                    mask_shapes=mask_shapes, device=device, add_batch_size=add_batch_size)
 
 # I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
-def get_masks_for_inference(layer_index_to_choose: int, mask_shapes: List[Tuple] =
-                            [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
+def get_masks_for_inference(layer_index_to_choose: int, mask_shapes: Tuple[Tuple[int, int, int], ...] =
+                            [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
                             # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
                             # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
                             # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54

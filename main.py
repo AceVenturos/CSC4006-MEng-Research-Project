@@ -3,11 +3,11 @@ from argparse import ArgumentParser
 # Process command line arguments
 parser = ArgumentParser()
 
-parser.add_argument('--train', type=int, default=1,
-                    help='Train network (default=1 (True)')
+parser.add_argument('--train', default=False, action='store_true',
+                    help='Train network')
 
-parser.add_argument('--test', type=int, default=1,
-                    help='Test network (default=1 (True)')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Test network')
 
 parser.add_argument('--batch_size', type=int, default=32,
                     help='Batch size of the training and test set (default=32)')
@@ -24,7 +24,7 @@ parser.add_argument('--device', type=str, default='cuda',
 parser.add_argument('--gpus_to_use', type=str, default='0',
                     help='Indexes of the GPUs to be use (default=0)')
 
-parser.add_argument('--use_data_parallel', type=int, default=0,
+parser.add_argument('--use_data_parallel', default=False, action='store_true',
                     help='Use multiple GPUs (default=0 (False))')
 
 parser.add_argument('--load_generator_network', type=str, default=None,
@@ -35,7 +35,7 @@ parser.add_argument('--load_discriminator_network', type=str, default=None,
 
 # Updated to retrained classifier Jamie 24/01 08:57
 # Updated after correctly saving classifier model as model file and not state dict - Jamie 24/01 09:19
-parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10_50ep.pt',
+parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10_40ep.pt',
                     help='Name of the pretrained (places365) vgg16 network the be loaded from model file (.pt)')
 
 # Updated to new training data - Jamie 24/01 08:57
@@ -70,21 +70,21 @@ import data
 if __name__ == '__main__':
     # Init models
     if args.load_generator_network is None:
-        generator = Generator(channels_factor=args.channel_factor)
+        generator = Generator(channels_factor=args.channel_factor).cuda()
     else:
-        generator = torch.load(args.load_generator_network)
+        generator = torch.load(args.load_generator_network).cuda()
         if isinstance(generator, nn.DataParallel):
             generator = generator.module
     if args.load_discriminator_network is None:
-        discriminator = Discriminator(channel_factor=args.channel_factor)
+        discriminator = Discriminator(channel_factor=args.channel_factor).cuda()
     else:
-        discriminator = torch.load(args.load_discriminator_network)
+        discriminator = torch.load(args.load_discriminator_network).cuda()
         if isinstance(discriminator, nn.DataParallel):
             discriminator = discriminator.module
     vgg16 = VGG16(args.load_pretrained_vgg16)
 
     # Init data parallel
-    if bool(args.use_data_parallel):
+    if args.use_data_parallel:
         generator = nn.DataParallel(generator)
         discriminator = nn.DataParallel(discriminator)
         vgg16 = nn.DataParallel(vgg16)
@@ -108,11 +108,10 @@ if __name__ == '__main__':
     # Back to 50, believe this is causing an error i.e. CUDA out of memory
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                       max_length=50, validation=True),
-        batch_size=args.batch_size, num_workers=2, shuffle=False,
+                       max_length=200, validation=True),
+        batch_size=args.batch_size, num_workers=2, shuffle=True, drop_last=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
-    validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                                        test=True)
+    validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt')
 
     # Initialises chosen model wrapper for training - Jamie 12/02 15:06
     if args.model_wrapper == 0:
@@ -141,12 +140,12 @@ if __name__ == '__main__':
         exit(1)
 
     # Performs training - TODO: Update one of the wrappers so I can get rid of unnecessary if statement
-    if bool(args.train):
+    if args.train:
         if args.model_wrapper == 0:
             # Testing - Jamie 12/02 15:19
             # print("Here 0")
             # exit(0)
-            model_wrapper.train(epochs=args.epochs, device=args.device)
+            model_wrapper.train(epochs=args.epochs, device=args.device, w_rec=0.1, w_div=0.1)
         elif args.model_wrapper == 1:
             # Testing - Jamie 12/02 15:19
             # print("Here 1")
@@ -154,6 +153,6 @@ if __name__ == '__main__':
             model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
 
     # Perform testing
-    if bool(args.test):
+    if args.test:
         print('FID=', model_wrapper.validate(device=args.device))
         model_wrapper.inference(device=args.device)
