@@ -1,6 +1,7 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import random
@@ -8,14 +9,10 @@ from skimage.draw import random_shapes
 import os
 import json
 
-# Mask size set for training here - Jamie
+
 def get_masks_for_training(
         mask_shapes: List[Tuple] =
         [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
-        #[(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-        #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-        # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-        # Updated for 10 Classes - Jamie 25/01/21 17:03
         device: str = 'cpu', add_batch_size: bool = False,
         p_random_mask: float = 0.3) -> List[torch.Tensor]:
     '''
@@ -28,71 +25,39 @@ def get_masks_for_training(
     '''
     # Select layer where no masking is used. Every output from the deeper layers get mapped out. Every higher layer gets
     # masked by a random shape
-    selected_layer = random.choice(list(range(len(mask_shapes))) + [0, 1])
+    selected_stage = random.choice(list(range(len(mask_shapes))) + [0, 1])
     # Make masks
     masks = []
-    random_mask = None
-    random_mask_used = False
-    spatial_varying_masks = random.uniform(0, 1) < p_random_mask
+    # Apply spatial varying masks
+    spatial_varying_masks = (np.random.rand() < p_random_mask) \
+                            and (selected_stage < (len(mask_shapes) - 1)) \
+                            and (selected_stage > 0)
+    # Init random mask
+    if spatial_varying_masks:
+        random_mask = random_shapes(tuple(reversed(mask_shapes))[selected_stage + 1][1:],
+                                    min_shapes=1,
+                                    max_shapes=4,
+                                    min_size=min(8, tuple(reversed(mask_shapes))[selected_stage + 1][1] // 2),
+                                    allow_overlap=True)[0][:, :, 0]
+        # Random mask to torch tensor
+        random_mask = torch.tensor(random_mask, dtype=torch.float32, device=device)[None, :, :]
+        # Change range of mask to [0, 1]
+        random_mask = (random_mask == 255.0).float()
+    # Loop over all shapes
     for index, mask_shape in enumerate(reversed(mask_shapes)):
-        # Full mask on case
-        if index < selected_layer:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.zeros((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
-                masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
-        # No mask case
-        elif index == selected_layer:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.ones((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
+        # Case if spatial varying masks are applied after selected stage
+        if spatial_varying_masks:
+            if index == selected_stage:
                 masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
-        # Random mask cases
-        elif index > selected_layer and random_mask is None:
-            #intial code always assumes if length(mask_shape) not >2 then mask would be randomly generated, this would
-            # only ever apply to the 1st FC layer but updated to check to make layer non-random if the spatial probability
-            # doens't say too.
-            if len(mask_shape) > 2:
-                # Get random mask
-                if spatial_varying_masks:
-                    random_mask_used = True
-                    random_mask = random_shapes(mask_shape[1:],
-                                                min_shapes=1,
-                                                max_shapes=4,
-                                                min_size=min(8, mask_shape[1] // 2),
-                                                allow_overlap=True)[0][:, :, 0]
-                    # Random mask to torch tensor
-                    random_mask = torch.tensor(random_mask, dtype=torch.float32, device=device)[None, :, :]
-                    # Change range of mask to [0, 1]
-                    random_mask = (random_mask == 255.0).float()
-                else:
-                    # Make no mask
-                    # From paper "In our default training step, we randomly select a pyramid level, and feed to the
-                    # generator only the features at that level, while masking out the features in all other levels"
-                    random_mask = torch.zeros(mask_shape[1:], dtype=torch.float32, device=device)[None, :, :]
-                # Save mask to list
-                masks.append(random_mask)
+            elif index < selected_stage:
+                masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
             else:
-                if spatial_varying_masks:
-                    # Save mask to list
-                    # Was initially skeptical here but I realise this is done like this for 1D layers as spatial mask can't
-                    # be upsampled from here.
-                    masks.append(torch.randint(low=0, high=2, size=mask_shape, dtype=torch.float32, device=device))
-                else:
-                    # Added as 'random mask' so the is elif block won't be hit again
-                    random_mask = torch.zeros(mask_shape, dtype=torch.float32, device=device)
-                    masks.append(random_mask)
+                masks.append(F.interpolate(random_mask[None], size=mask_shape[1:], mode='nearest')[0])
+        # Case if only one stage is selected
         else:
-            # Save mask to list
-            if random_mask_used:
-                masks.append(F.upsample_nearest(random_mask[None, :, :, :], size=mask_shape[1:]).float().to(device)[0])
+            if index == selected_stage:
+                masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
             else:
-                # From paper "In our default training step, we randomly select a pyramid level, and feed to the
-                # generator only the features at that level, while masking out the features in all other levels"
                 masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
     # Add batch size dimension
     if add_batch_size:
@@ -102,43 +67,27 @@ def get_masks_for_training(
     masks.reverse()
     return masks
 
-# I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
-def get_masks_for_validation(mask_shapes: List[Tuple] =
-                            [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
-                            # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-                            # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-                            # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-                            # Updated for 10 Classes - Jamie 25/01/21 17:03
-                            device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
-    return get_masks_for_inference(layer_index_to_choose=random.choice(range(len(mask_shapes))),
+
+def get_masks_for_validation(mask_shapes: Tuple[Tuple[int, int, int], ...] =
+                             ((1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)),
+                             device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
+    return get_masks_for_inference(stage_index_to_choose=random.choice(range(len(mask_shapes))),
                                    mask_shapes=mask_shapes, device=device, add_batch_size=add_batch_size)
 
-# I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
-def get_masks_for_inference(layer_index_to_choose: int, mask_shapes: Tuple[Tuple[int, int, int], ...] =
-                            [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
-                            # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-                            # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-                            # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-                            # Updated for 10 Classes - Jamie 25/01/21 17:03
-                            device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
+
+def get_masks_for_inference(stage_index_to_choose: int,
+                            mask_shapes: Tuple[Tuple[int, int, int], ...] = (
+                                    (1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)),
+                            device: str = 'cpu',
+                            add_batch_size: bool = False) -> List[torch.Tensor]:
     # Init list for masks
     masks = []
     # Loop over all shapes
     for index, mask_shape in enumerate(reversed(mask_shapes)):
-        if index == layer_index_to_choose:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.ones((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
-                masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
+        if index == stage_index_to_choose:
+            masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
         else:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.zeros((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
-                masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
+            masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
     # Add batch size dimension
     if add_batch_size:
         for index in range(len(masks)):
@@ -158,6 +107,7 @@ def normalize_0_1_batch(input: torch.tensor) -> torch.tensor:
     return ((input - torch.min(input_flatten, dim=1)[0][:, None, None, None]) / (
             torch.max(input_flatten, dim=1)[0][:, None, None, None] -
             torch.min(input_flatten, dim=1)[0][:, None, None, None]))
+
 
 def normalize_m1_1_batch(input: torch.tensor) -> torch.tensor:
     '''
@@ -207,3 +157,21 @@ class Logger(object):
             values = torch.tensor(values)
             # Save values
             torch.save(values, os.path.join(path, '{}.pt'.format(metric_name)))
+
+@torch.no_grad()
+def exponential_moving_average(model_ema: Union[torch.nn.Module, nn.DataParallel],
+                               model_train: Union[torch.nn.Module, nn.DataParallel], decay: float = 0.99) -> None:
+    """
+    Function apples one exponential moving average step to a given model to be accumulated and a given training model
+    :param model_ema: (Union[torch.nn.Module, nn.DataParallel]) Model to be accumulated
+    :param model_train: (Union[torch.nn.Module, nn.DataParallel]) Training model
+    :param decay: (float) Decay factor
+    """
+    # Check types
+    assert type(model_ema) is type(model_train), 'EMA can only be performed on networks of the same type!'
+    # Get parameter dicts
+    model_ema_dict = dict(model_ema.named_parameters())
+    model_train_dict = dict(model_train.named_parameters())
+    # Apply ema
+    for key in model_ema_dict.keys():
+        model_ema_dict[key].data.mul_(decay).add_(1 - decay, model_train_dict[key].data)

@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import kornia
 
+
 class SemanticReconstructionLoss(nn.Module):
     '''
     Implementation of the proposed semantic reconstruction loss
@@ -62,7 +63,6 @@ class SemanticReconstructionLoss(nn.Module):
                 feature_real, feature_fake = \
                     kornia.normalize_min_max(union.unsqueeze(dim=1)).split(split_size=feature_fake.shape[0], dim=0)
                 """
-
             # Calc l1 loss of the real and fake feature conditionalized by the corresponding mask
             loss = loss + torch.mean(torch.abs((feature_real - feature_fake) * mask))
         return loss
@@ -97,20 +97,19 @@ class DiversityLoss(nn.Module):
         :return: (torch.Tensor) Loss
         '''
         # Check batch sizes
-        assert (images_fake.shape[0] > 1)
+        assert images_fake.shape[0] > 1
         # Divide mini-batch of images into two paris
         images_fake_1 = images_fake[:images_fake.shape[0] // 2]
         images_fake_2 = images_fake[images_fake.shape[0] // 2:]
         # Divide latent inputs into two paris
         latent_inputs_1 = latent_inputs[:latent_inputs.shape[0] // 2]
         latent_inputs_2 = latent_inputs[latent_inputs.shape[0] // 2:]
-        # print("Full fake image batch size: {}      Latent input batch size: {}".format(images_fake.__len__(), latent_inputs.__len__()))
-        # print("Images Fake shapes 1: {} 2: {}".format(images_fake_1.shape, images_fake_2.shape))
-        # print("Latent Input shapes 1: {} 2: {}".format(latent_inputs_1.shape, latent_inputs_2.shape))
         # Calc loss
         loss = self.l1_loss(latent_inputs_1, latent_inputs_2) \
                / ( self.l1_loss(images_fake_1, images_fake_2) + 1e-08)
         return loss
+
+
 
 
 class LSGANGeneratorLoss(nn.Module):
@@ -132,7 +131,7 @@ class LSGANGeneratorLoss(nn.Module):
     def forward(self, prediction_fake: torch.Tensor) -> torch.Tensor:
         '''
         Forward pass
-        :param images_fake: (torch.Tensor) Fake images generated
+        :param prediction_fake: (torch.Tensor) Fake images generated
         :return: (torch.Tensor) Loss
         '''
         return 0.5 * torch.mean((prediction_fake - 1.0) ** 2)

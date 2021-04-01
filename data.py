@@ -21,8 +21,7 @@ class Places365(Dataset):
         self.return_masks = return_masks
         self.validation = validation
         # Get index file
-        # My guy forgot to add header=None, pandas reads first line as a header by default - Jamie 27/01/21 13:17
-        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name), header=None).values[:, 0]
+        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name)).values[:, 0]
         self.file_paths.sort()
         # Make dict of labels
         self.label_dict = dict()
@@ -50,8 +49,6 @@ class Places365(Dataset):
         # Reshape image if needed
         if image.shape[0] == 1:
             image = image.repeat_interleave(repeats=3, dim=0)
-        # # Normalize image between zero and one
-        # image = (image - image.min()) / (image.max() - image.min()).clamp(min=1e-08)
         # Normalize image
         image = kornia.normalize_min_max(image[None], min_val=-1., max_val=1.)[0]
         # Grayscale to rgb if needed
