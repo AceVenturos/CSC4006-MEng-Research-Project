@@ -128,11 +128,11 @@ class Discriminator(nn.Module):
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
-            DiscriminatorResidualBlock(in_channels=int(512 // channel_factor), out_channels=int(768 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(512 // channel_factor), out_channels=int(512 // channel_factor)),
             nn.LeakyReLU(negative_slope=0.2),
             nn.AdaptiveAvgPool2d(output_size=(1, 1)),
             nn.Flatten(start_dim=1),
-            spectral_norm(nn.Linear(in_features=int(768 // channel_factor), out_features=128, bias=True)),
+            spectral_norm(nn.Linear(in_features=int(512 // channel_factor), out_features=128, bias=True)),
             nn.LeakyReLU(negative_slope=0.2)
         )
         # Init classification layer
@@ -151,6 +151,8 @@ class Discriminator(nn.Module):
         :return: (torch.Tensor) Output prediction of shape (batch size, 1)
         '''
         # Main path
+        global downsamplingCount
+        downsamplingCount = 0
         output = self.layers(input)
         # Reshape output into two dimensions
         output = output.flatten(start_dim=1)
@@ -345,6 +347,7 @@ class GeneratorResidualBlock(nn.Module):
         for layer in self.main_block1:
             if isinstance(layer, ConditionalBatchNorm):
                 output = layer(output, class_id)
+
             else:
                 output = layer(output)
 
@@ -445,6 +448,8 @@ class DiscriminatorInputResidualBlock(nn.Module):
         '''
         # Main path
         output = self.downsampling(self.main_block(input))
+        global downsamplingCount
+        downsamplingCount += 1
         # Residual mapping
         output_residual = self.residual_mapping(self.downsampling(input))
         output = output + output_residual
@@ -494,7 +499,10 @@ class DiscriminatorResidualBlock(nn.Module):
         output_residual = self.residual_mapping(input)
         output = output + output_residual
         # Downsampling
-        output = self.downsampling(output)
+        global downsamplingCount
+        if (downsamplingCount < 5):
+            output = self.downsampling(output)
+            downsamplingCount += 1
         return output
 
 
@@ -530,7 +538,7 @@ class ConditionalBatchNorm(nn.Module):
         # Perform normalization
         output = self.batch_norm(input)
         # Get affine parameters
-        scale, bias = self.embedding(class_id.argmax(dim=-1, keepdim=False)).chunk(chunks=2, dim=1)
+        scale, bias = self.embedding(class_id.argmax(dim=-1, keepdim=False).cuda()).chunk(chunks=2, dim=1)
         scale = scale.view(scale.shape[0], scale.shape[-1], 1, 1)
         bias = bias.view(bias.shape[0], bias.shape[-1], 1, 1)
         # Apply affine parameters
