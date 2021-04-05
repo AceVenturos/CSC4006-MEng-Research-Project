@@ -7,6 +7,7 @@ from PIL import Image
 import torchvision.transforms.functional as TVF
 import pandas as pd
 import numpy as np
+import kornia
 
 import misc
 
@@ -14,13 +15,11 @@ import misc
 class Places365(Dataset):
 
     def __init__(self, path_to_index_file: str = '', index_file_name: str = 'train.txt',
-                 return_masks: bool = True, max_length: int = None, validation: bool = False,
-                 test: bool = False) -> None:
+                 return_masks: bool = True, max_length: int = None, validation: bool = False) -> None:
         # Save parameter
         self.path_to_index_file = path_to_index_file
         self.return_masks = return_masks
         self.validation = validation
-        self.test = test
         # Get index file
         # My guy forgot to add header=None, pandas reads first line as a header by default - Jamie 27/01/21 13:17
         self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name), header=None).values[:, 0]
@@ -48,17 +47,17 @@ class Places365(Dataset):
         image = Image.open(os.path.join(self.path_to_index_file, self.file_paths[item]))
         # Image to tensor
         image = TVF.to_tensor(image)
-        # Normalize image to a mean of zero and a variance of one
-        image.sub_(image.mean()).div_(image.std())
+        # Reshape image if needed
+        if image.shape[0] == 1:
+            image = image.repeat_interleave(repeats=3, dim=0)
+        # Normalize image
+        image = kornia.normalize_min_max(image[None], min_val=-1., max_val=1.)[0]
         # Grayscale to rgb if needed
         if image.shape[0] == 1:
             image = image.repeat_interleave(dim=0, repeats=3)
         # Make label
         label = torch.zeros(len(self.label_dict), dtype=torch.long)
         label[self.label_dict[self.file_paths[item].split('/')[1]]] = 1
-        # Return while testing no label and masks
-        if self.test:
-            return image
         # Get random masks
         if self.validation:
             masks = misc.get_masks_for_validation()

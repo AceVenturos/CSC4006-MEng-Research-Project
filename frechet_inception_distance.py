@@ -65,7 +65,6 @@ def frechet_inception_distance(dataset_real: DataLoader, generator: nn.Module, v
     for images, labels, masks in dataset_real:
         # Data to device
         images = images.to(device)
-        del labels
         for index in range(len(masks)):
             masks[index] = masks[index].to(device)
         # Normalize images
@@ -88,7 +87,7 @@ def frechet_inception_distance(dataset_real: DataLoader, generator: nn.Module, v
                                     if isinstance(generator, nn.DataParallel) else generator.latent_dimensions),
                                    dtype=torch.float32, device=device, requires_grad=True)
         # Generate fake images
-        images_fake = generator(input=noise_vector, features=features_real, masks=masks)
+        images_fake = generator(input=noise_vector, features=features_real, masks=masks, class_id=labels.float())
         # Normalize fake images
         images_fake = misc.normalize_m1_1_batch(images_fake)
         # Reshape

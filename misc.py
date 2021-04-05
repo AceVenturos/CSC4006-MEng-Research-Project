@@ -1,20 +1,18 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import random
 from skimage.draw import random_shapes
 import os
 import json
 
-# Mask size set for training here - Jamie
+
 def get_masks_for_training(
         mask_shapes: List[Tuple] =
-        [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
-        #[(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-        #[(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-        # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-        # Updated for 10 Classes - Jamie 25/01/21 17:03
+        [(1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)],
         device: str = 'cpu', add_batch_size: bool = False,
         p_random_mask: float = 0.3) -> List[torch.Tensor]:
     '''
@@ -27,7 +25,7 @@ def get_masks_for_training(
     '''
     # Select layer where no masking is used. Every output from the deeper layers get mapped out. Every higher layer gets
     # masked by a random shape
-    selected_layer = np.random.choice(list([1, 1, 2, 2, 3, 3, 4, 5, 6, 7]))
+    selected_layer = random.choice(list(range(len(mask_shapes))) + [0, 1])
     # Make masks
     masks = []
     random_mask = None
@@ -101,43 +99,27 @@ def get_masks_for_training(
     masks.reverse()
     return masks
 
-# I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
-def get_masks_for_validation(mask_shapes: List[Tuple] =
-                            [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
-                            # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-                            # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-                            # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-                            # Updated for 10 Classes - Jamie 25/01/21 17:03
-                            device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
-    return get_masks_for_inference(layer_index_to_choose=np.random.choice(range(len(mask_shapes))),
+
+def get_masks_for_validation(mask_shapes: Tuple[Tuple[int, int, int], ...] =
+                             ((1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)),
+                             device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
+    return get_masks_for_inference(stage_index_to_choose=random.choice(range(len(mask_shapes))),
                                    mask_shapes=mask_shapes, device=device, add_batch_size=add_batch_size)
 
-# I believe this function hardcodes the masks shapes, may be worth looking into making this dynamic - Jamie
-def get_masks_for_inference(layer_index_to_choose: int, mask_shapes: List[Tuple] =
-                            [(64, 32, 32), (128, 16, 16), (256, 8, 8), (512, 4, 4), (512, 4, 4), (4096,), (10,)],
-                            # [(64, 64, 64), (128, 32, 32), (256, 16, 16), (512, 8, 8), (512, 4, 4), (4096,), (365,)],
-                            # [(64, 128, 128), (128, 64, 64), (256, 32, 32), (512, 16, 16), (512, 8, 8), (4096,), (365,)],
-                            # Masks for 64x64, 128x128 and 256x256 respectively - Jamie 15/01/21 11:54
-                            # Updated for 10 Classes - Jamie 25/01/21 17:03
-                            device: str = 'cpu', add_batch_size: bool = False) -> List[torch.Tensor]:
+
+def get_masks_for_inference(stage_index_to_choose: int,
+                            mask_shapes: Tuple[Tuple[int, int, int], ...] = (
+                                    (1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)),
+                            device: str = 'cpu',
+                            add_batch_size: bool = False) -> List[torch.Tensor]:
     # Init list for masks
     masks = []
     # Loop over all shapes
     for index, mask_shape in enumerate(reversed(mask_shapes)):
-        if index == layer_index_to_choose:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.ones((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
-                masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
+        if index == stage_index_to_choose:
+            masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
         else:
-            if len(mask_shape) > 1:
-                # Save mask to list
-                masks.append(torch.zeros((1, mask_shape[1], mask_shape[2]), dtype=torch.float32, device=device))
-            else:
-                # Save mask to list
-                masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
+            masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
     # Add batch size dimension
     if add_batch_size:
         for index in range(len(masks)):
@@ -157,6 +139,7 @@ def normalize_0_1_batch(input: torch.tensor) -> torch.tensor:
     return ((input - torch.min(input_flatten, dim=1)[0][:, None, None, None]) / (
             torch.max(input_flatten, dim=1)[0][:, None, None, None] -
             torch.min(input_flatten, dim=1)[0][:, None, None, None]))
+
 
 def normalize_m1_1_batch(input: torch.tensor) -> torch.tensor:
     '''
@@ -206,3 +189,21 @@ class Logger(object):
             values = torch.tensor(values)
             # Save values
             torch.save(values, os.path.join(path, '{}.pt'.format(metric_name)))
+
+@torch.no_grad()
+def exponential_moving_average(model_ema: Union[torch.nn.Module, nn.DataParallel],
+                               model_train: Union[torch.nn.Module, nn.DataParallel], decay: float = 0.99) -> None:
+    """
+    Function apples one exponential moving average step to a given model to be accumulated and a given training model
+    :param model_ema: (Union[torch.nn.Module, nn.DataParallel]) Model to be accumulated
+    :param model_train: (Union[torch.nn.Module, nn.DataParallel]) Training model
+    :param decay: (float) Decay factor
+    """
+    # Check types
+    assert type(model_ema) is type(model_train), 'EMA can only be performed on networks of the same type!'
+    # Get parameter dicts
+    model_ema_dict = dict(model_ema.named_parameters())
+    model_train_dict = dict(model_train.named_parameters())
+    # Apply ema
+    for key in model_ema_dict.keys():
+        model_ema_dict[key].data.mul_(decay).add_(1 - decay, model_train_dict[key].data)

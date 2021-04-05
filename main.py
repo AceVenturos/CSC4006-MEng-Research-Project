@@ -3,16 +3,16 @@ from argparse import ArgumentParser
 # Process command line arguments
 parser = ArgumentParser()
 
-parser.add_argument('--train', type=int, default=1,
-                    help='Train network (default=1 (True)')
+parser.add_argument('--train', default=False, action='store_true',
+                    help='Train network')
 
-parser.add_argument('--test', type=int, default=1,
-                    help='Test network (default=1 (True)')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Test network')
 
-parser.add_argument('--batch_size', type=int, default=32,
-                    help='Batch size of the training and test set (default=32)')
+parser.add_argument('--batch_size', type=int, default=64,
+                    help='Batch size of the training and test set (default=60)')
 
-parser.add_argument('--lr', type=float, default=1e-04,
+parser.add_argument('--lr', type=float, default=1e-05,
                     help='Main learning rate of the adam optimizer (default=1e-04)')
 
 parser.add_argument('--channel_factor', type=float, default=1.0,
@@ -24,7 +24,7 @@ parser.add_argument('--device', type=str, default='cuda',
 parser.add_argument('--gpus_to_use', type=str, default='0',
                     help='Indexes of the GPUs to be use (default=0)')
 
-parser.add_argument('--use_data_parallel', type=int, default=0,
+parser.add_argument('--use_data_parallel', default=False, action='store_true',
                     help='Use multiple GPUs (default=0 (False))')
 
 parser.add_argument('--load_generator_network', type=str, default=None,
@@ -69,29 +69,22 @@ import data
 
 if __name__ == '__main__':
     # Init models
-    if args.load_generator_network is None:
-        generator = Generator(channels_factor=args.channel_factor)
-    else:
-        generator = torch.load(args.load_generator_network)
-        if isinstance(generator, nn.DataParallel):
-            generator = generator.module
-    if args.load_discriminator_network is None:
-        discriminator = Discriminator(channel_factor=args.channel_factor)
-    else:
-        discriminator = torch.load(args.load_discriminator_network)
-        if isinstance(discriminator, nn.DataParallel):
-            discriminator = discriminator.module
-    vgg16 = VGG16(args.load_pretrained_vgg16)
-
-    # Init data parallel
-    if bool(args.use_data_parallel):
-        generator = nn.DataParallel(generator)
-        discriminator = nn.DataParallel(discriminator)
-        vgg16 = nn.DataParallel(vgg16)
+    generator = Generator(channels_factor=args.channel_factor).cuda()
+    discriminator = Discriminator(channel_factor=args.channel_factor).cuda()
+    vgg16 = VGG16(args.load_pretrained_vgg16).cuda()
 
     # Init optimizers
-    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05)#, betas=adam_betas)
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-07)#, betas=adam_betas)
+    generator_optimizer = torch.optim.Adam(generator.parameters(), lr=args.lr)
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.1*args.lr)
+
+    # Load checkpoint
+    if args.load_checkpoint is not None:
+        checkpoint = torch.load(args.load_checkpoint, map_location='cpu')
+        generator.load_state_dict(checkpoint['generator'])
+        discriminator.load_state_dict(checkpoint['discriminator'])
+        generator_optimizer.load_state_dict(checkpoint['generator_optimizer'])
+        discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer'])
+
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
@@ -107,11 +100,17 @@ if __name__ == '__main__':
     # Back to 50, believe this is causing an error i.e. CUDA out of memory
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                       max_length=50, validation=True),
-        batch_size=args.batch_size, num_workers=2, shuffle=False,
+                       max_length=100, validation=True),
+        batch_size=args.batch_size, num_workers=2, shuffle=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
     validation_dataset = data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
-                                        test=True)
+                                        validation=True)
+
+    # Init data parallel
+    if args.use_data_parallel:
+        generator = nn.DataParallel(generator)
+        discriminator = nn.DataParallel(discriminator)
+        vgg16 = nn.DataParallel(vgg16)
 
     # Initialises chosen model wrapper for training - Jamie 12/02 15:06
     if args.model_wrapper == 0:
@@ -140,7 +139,7 @@ if __name__ == '__main__':
         exit(1)
 
     # Performs training - TODO: Update one of the wrappers so I can get rid of unnecessary if statement
-    if bool(args.train):
+    if args.train:
         if args.model_wrapper == 0:
             # Testing - Jamie 12/02 15:19
             # print("Here 0")
@@ -153,6 +152,6 @@ if __name__ == '__main__':
             model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
 
     # Perform testing
-    if bool(args.test):
+    if args.test:
         print('FID=', model_wrapper.validate(device=args.device))
         model_wrapper.inference(device=args.device)
