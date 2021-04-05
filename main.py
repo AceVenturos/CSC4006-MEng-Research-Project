@@ -90,9 +90,8 @@ if __name__ == '__main__':
         vgg16 = nn.DataParallel(vgg16)
 
     # Init optimizers
-    adam_betas = (0.5, 0.9)
     generator_optimizer = torch.optim.Adam(generator.parameters(), lr=1e-05)#, betas=adam_betas)
-    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-06)#, betas=adam_betas)
+    discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=1e-07)#, betas=adam_betas)
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
@@ -134,8 +133,8 @@ if __name__ == '__main__':
                                                 validation_dataset_fid=validation_dataset_fid,
                                                 generator_optimizer=generator_optimizer,
                                                 discriminator_optimizer=discriminator_optimizer,
-                                                weight_rotation_loss_g=0.2,
-                                                weight_rotation_loss_d=0.5)
+                                                weight_rotation_loss_g=0.1,
+                                                weight_rotation_loss_d=0.1)
     else:
         print("ERR: Select a valid model wrapper option:\n\t0: Original SGP\n\t1: Self-Supervised SGP w/ Aux Rotation")
         exit(1)
@@ -146,7 +145,7 @@ if __name__ == '__main__':
             # Testing - Jamie 12/02 15:19
             # print("Here 0")
             # exit(0)
-            model_wrapper.train(epochs=args.epochs, device=args.device)
+            model_wrapper.train(epochs=args.epochs, device=args.device, w_rec=0.1, w_div=0.1)
         elif args.model_wrapper == 1:
             # Testing - Jamie 12/02 15:19
             # print("Here 1")

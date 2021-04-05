@@ -27,7 +27,7 @@ def get_masks_for_training(
     '''
     # Select layer where no masking is used. Every output from the deeper layers get mapped out. Every higher layer gets
     # masked by a random shape
-    selected_layer = np.random.choice(range(7))
+    selected_layer = np.random.choice(list([1, 1, 2, 2, 3, 3, 4, 5, 6, 7]))
     # Make masks
     masks = []
     random_mask = None

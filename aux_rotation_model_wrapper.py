@@ -38,8 +38,8 @@ class AuxRotationModelWrapper(object):
                  vgg16: Union[VGG16, nn.DataParallel] = VGG16(),
                  generator_optimizer: torch.optim.Optimizer = None,
                  discriminator_optimizer: torch.optim.Optimizer = None,
-                 weight_rotation_loss_g: float = 0.5,
-                 weight_rotation_loss_d: float = 1.0,
+                 weight_rotation_loss_g: float = 0.1,
+                 weight_rotation_loss_d: float = 0.1,
                  generator_loss: nn.Module = LSGANGeneratorLoss(),
                  discriminator_loss: nn.Module = LSGANDiscriminatorLoss(),
                  semantic_reconstruction_loss: nn.Module = SemanticReconstructionLoss(),
@@ -296,45 +296,45 @@ class AuxRotationModelWrapper(object):
                 # writer.add_scalar("D Rot Loss / train", d_rot_loss * self.weight_rotation_loss_d, self.step_num)
 
 
-                if self.step_num % 50 == 0:
-                    with torch.no_grad():
-                        # Generator into eval mode
-                        self.generator.eval()
-                        # Get random images form validation dataset
-                        images = [self.validation_dataset[index].unsqueeze(dim=0).to(device) for index in
-                                  np.random.choice(range(len(self.validation_dataset)), replace=False, size=7)]
-                        # Get list of masks for different layers
-                        masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in
-                                        range(7)]
-                        # Init tensor of fake images to store all fake images
-                        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
-                                                  dtype=torch.float32, device=device)
-                        # Init counter
-                        counter = 0
-                        # Loop over all image and masks
-                        for image in images:
-                            for masks in masks_levels:
-                                # Generate fake images
-                                fake_image = self.generator(
-                                    input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
-                                    features=self.vgg16(image),
-                                    masks=masks)
-                                # Save fake images
-                                fake_images[counter] = fake_image.squeeze(dim=0)
-                                # Increment counter
-                                counter += 1
-                        # Save tensor as image
-                        # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
-                        # writer.add_image('Generated Images', grid_images,
-                        #                  global_step=self.step_num)
-                        # Generator back into train mode
-                        self.generator.train()
+                # if self.step_num % 50 == 0:
+                #     with torch.no_grad():
+                #         # Generator into eval mode
+                #         self.generator.eval()
+                #         # Get random images form validation dataset
+                #         images = [self.validation_dataset[index].unsqueeze(dim=0).to(device) for index in
+                #                   np.random.choice(range(len(self.validation_dataset)), replace=False, size=7)]
+                #         # Get list of masks for different layers
+                #         masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in
+                #                         range(7)]
+                #         # Init tensor of fake images to store all fake images
+                #         fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
+                #                                   dtype=torch.float32, device=device)
+                #         # Init counter
+                #         counter = 0
+                #         # Loop over all image and masks
+                #         for image in images:
+                #             for masks in masks_levels:
+                #                 # Generate fake images
+                #                 fake_image = self.generator(
+                #                     input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
+                #                     features=self.vgg16(image),
+                #                     masks=masks)
+                #                 # Save fake images
+                #                 fake_images[counter] = fake_image.squeeze(dim=0)
+                #                 # Increment counter
+                #                 counter += 1
+                #         # Save tensor as image
+                #         # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
+                #         # writer.add_image('Generated Images', grid_images,
+                #         #                  global_step=self.step_num)
+                #         # Generator back into train mode
+                #         self.generator.train()
 
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:
                     self.progress_bar.set_description('Validation')
                     fid = self.validate(device=device)
-                    self.inference(device=device)
+                    #self.inference(device=device)
                     # Log fid
                     self.logger.log(metric_name='fid', value=fid)
                     self.logger.log(metric_name='iterations_fid', value=self.progress_bar.n)
