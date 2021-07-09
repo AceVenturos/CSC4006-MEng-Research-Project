@@ -23,7 +23,7 @@ from PIL import Image
 from models import VGG16, Generator, Discriminator
 from lossfunction import SemanticReconstructionLoss, DiversityLoss, LSGANGeneratorLoss, LSGANDiscriminatorLoss
 from data import image_label_list_of_masks_collate_function
-from frechet_inception_distance import frechet_inception_distance, frechet_inception_distance_sgp_level
+from frechet_inception_distance import frechet_inception_distance
 from misc import Logger, get_masks_for_inference
 
 
@@ -159,6 +159,11 @@ class ModelWrapper(object):
         fid = self.validate(device=device)
         # Main loop
         for epoch in range(epochs):
+            # Ensure models are in the right mode
+            self.generator.train()
+            self.discriminator.train()
+            self.vgg16.eval()
+            # self.generator_ema.eval()
             for images_real, labels, masks in self.training_dataset:
                 ############ Discriminator training ############
                 # Update progress bar with batch size
@@ -301,6 +306,7 @@ class ModelWrapper(object):
         # Generator into eval mode
         self.generator.eval()
         # Get random images form validation dataset
+        print(len(self.validation_dataset_fid))
         images, labels, _ = image_label_list_of_masks_collate_function(
             [self.validation_dataset_fid.dataset[index] for index in
              np.random.choice(range(len(self.validation_dataset_fid)), replace=True, size=7)])

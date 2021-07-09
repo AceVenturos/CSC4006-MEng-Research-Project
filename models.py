@@ -220,6 +220,7 @@ class Discriminator(nn.Module):
             SelfAttention(channels=int(64 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
+            SelfAttention(channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
@@ -818,3 +819,4 @@ def init_weights(module: nn.Module) -> None:
 # Parameters D: 1,772,963
 # Iterations:   1,803,459
 # Predicted training time ~100-120 Hours for 1 epoch with a batch size of 2
+

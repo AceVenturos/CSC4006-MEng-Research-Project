@@ -12,7 +12,7 @@ parser.add_argument('--test', default=False, action='store_true',
 parser.add_argument('--batch_size', type=int, default=64,
                     help='Batch size of the training and test set (default=60)')
 
-parser.add_argument('--lr', type=float, default=1e-04,
+parser.add_argument('--lr', type=float, default=1e-05,
                     help='Main learning rate of the adam optimizer (default=1e-04)')
 
 parser.add_argument('--channel_factor', type=float, default=1.0,
@@ -58,6 +58,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus_to_use
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from models import Generator, Generator2, Discriminator, DiscriminatorAuxRotation, VGG16
 from model_wrapper import ModelWrapper
@@ -138,8 +139,8 @@ if __name__ == '__main__':
                                                 validation_dataset_fid=validation_dataset_fid,
                                                 generator_optimizer=generator_optimizer,
                                                 discriminator_optimizer=discriminator_optimizer,
-                                                weight_rotation_loss_g=0.2,
-                                                weight_rotation_loss_d=1.0)
+                                                weight_rotation_loss_g=0.1,
+                                                weight_rotation_loss_d=0.1)
     else:
         print("ERR: Select a valid model wrapper option:\n\t0: Original SGP\n\t1: Self-Supervised SGP w/ Aux Rotation")
         exit(1)
