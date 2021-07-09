@@ -9,7 +9,8 @@ parser.add_argument('--train', default=False, action='store_true',
 parser.add_argument('--test', default=False, action='store_true',
                     help='Test network')
 
-parser.add_argument('--batch_size', type=int, default=64,
+
+parser.add_argument('--batch_size', type=int, default=20,
                     help='Batch size of the training and test set (default=60)')
 
 parser.add_argument('--lr', type=float, default=1e-05,
@@ -27,31 +28,17 @@ parser.add_argument('--gpus_to_use', type=str, default='0',
 parser.add_argument('--use_data_parallel', default=False, action='store_true',
                     help='Use multiple GPUs (default=0 (False))')
 
-parser.add_argument('--load_generator_network', type=str, default=None,
-                    help='Name of the generator network the be loaded from model file (.pt) (default=None)')
+parser.add_argument('--load_checkpoint', type=str, default=None,
+                    help='Path to checkpoint to be loaded (default=None)')
 
-parser.add_argument('--load_discriminator_network', type=str, default=None,
-                    help='Name of the discriminator network the be loaded from model file (.pt) (default=None)')
-
-# Updated to retrained classifier Jamie 24/01 08:57
-# Updated after correctly saving classifier model as model file and not state dict - Jamie 24/01 09:19
 parser.add_argument('--load_pretrained_vgg16', type=str, default='pre_trained_models/VGG16_P10_50ep.pt',
                     help='Name of the pretrained (places365) vgg16 network the be loaded from model file (.pt)')
 
-# Updated to new training data - Jamie 24/01 08:57
 parser.add_argument('--path_to_places365', type=str, default='../Training Data/Places_Nature10',
                     help='Path to places365 dataset.')
 
 parser.add_argument('--epochs', type=int, default=50,
                     help='Epochs to perform while training (default=100)')
-
-parser.add_argument('--model_wrapper', type=int, default=0,
-                    help='Select a valid model wrapper option:\n\t0: Original SGP'
-                         '\n\t1: Self-Supervised SGP w/ Aux Rotation')
-
-parser.add_argument('--visualise', type=int, default=0,
-                    help='Select a valid option:\n\t0: Skip Visualisation'
-                         '\n\t1: Perform Visualisation')
 
 args = parser.parse_args()
 
@@ -62,9 +49,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus_to_use
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from models import Generator, Discriminator, DiscriminatorAuxRotation, VGG16
+
+from models import Generator, Discriminator, VGG16
 from model_wrapper import ModelWrapper
-from aux_rotation_model_wrapper import AuxRotationModelWrapper
 import data
 
 if __name__ == '__main__':
@@ -90,14 +77,10 @@ if __name__ == '__main__':
     print('Number of discriminator parameters', sum(p.numel() for p in discriminator.parameters()))
 
     # Init dataset
-    # Changed num of workers to 2 instead of batch size - Jamie 25/01/21 21:04
     training_dataset = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='train.txt'),
         batch_size=args.batch_size, num_workers=2, shuffle=True, drop_last=True,
         collate_fn=data.image_label_list_of_masks_collate_function)
-
-    # Changed max_length from 6000 to 200 - Jamie TODO: Find optimal max_length value
-    # Back to 50, believe this is causing an error i.e. CUDA out of memory
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_places365, index_file_name='val.txt',
                        max_length=100, validation=True),

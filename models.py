@@ -163,25 +163,6 @@ class Discriminator(nn.Module):
         output = self.classification(output)
         return output + output_embedding
 
-    # Added due to the class embeddings in the previous foward method - Jamie 05/02/21 12:06
-    def aux_rotation_forward(self, input: torch.Tensor) -> torch.Tensor:
-        # Downsampling Count Reset
-        global downsamplingCount
-        downsamplingCount = 0
-
-        # Main Path
-        output = self.layers(input)
-
-        # Reshape output into two dimensions
-        output = output.flatten(start_dim=1)
-
-        # Aux Rotation Path - Jamie 04/02/21 10:45
-        aux_rot_logits = self.rotationClassification(output)
-        aux_rot_prob = self.softmax(aux_rot_logits)
-
-        # print("Output size after classification: " + str(output.shape))
-        return aux_rot_logits, aux_rot_prob
-
 
 class VGG16(nn.Module):
     '''
@@ -316,6 +297,7 @@ class GeneratorResidualBlock(nn.Module):
     '''
 
     def __init__(self, in_channels: int, out_channels: int, feature_channels: int,
+                 number_of_classes: int = 365) -> None:
                  number_of_classes: int = 10) -> None:
         '''
         Constructor
@@ -386,7 +368,7 @@ class GeneratorResidualBlock(nn.Module):
         output_main = output + output_residual
 
         upsamplingCount += 1
-
+        
         # Feature path
         mapped_features = self.masked_feature_mapping(masked_features)
         # Addition step
@@ -582,3 +564,4 @@ def init_weights(module: nn.Module) -> None:
 # Parameters D: 1,772,963
 # Iterations:   1,803,459
 # Predicted training time ~100-120 Hours for 1 epoch with a batch size of 2
+

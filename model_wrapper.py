@@ -4,14 +4,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 import torchvision
-
-# Implementing tensorboard to help monitor training/testing - Jamie 08/02 23:24
-# from torch.utils.tensorboard import SummaryWriter
-#
-# # "Writer will output to ./runs/ directory by default" per PyTorch documentation - Jamie 08/02 23:24
-# writer1 = SummaryWriter('runs/testName/Loss')
-# writer2 = SummaryWriter('runs/testName/Images')
-
 from tqdm import tqdm
 import copy
 import numpy as np
@@ -157,6 +149,11 @@ class ModelWrapper(object):
         fid = self.validate(device=device)
         # Main loop
         for epoch in range(epochs):
+            # Ensure models are in the right mode
+            self.generator.train()
+            self.discriminator.train()
+            self.vgg16.eval()
+            # self.generator_ema.eval()
             for images_real, labels, masks in self.training_dataset:
                 ############ Discriminator training ############
                 # Update progress bar with batch size
@@ -235,14 +232,14 @@ class ModelWrapper(object):
                 self.logger.log(metric_name='epoch', value=epoch)
                 # Validate model
                 if self.progress_bar.n % validate_after_n_iterations == 0:
-                    self.progress_bar.set_description('Validation')
-                    fid = self.validate(device=device)
+                    #self.progress_bar.set_description('Validation')
+                    #fid = self.validate(device=device)
                     self.inference(device=device)
                     # Log fid
-                    self.logger.log(metric_name='fid', value=fid)
-                    self.logger.log(metric_name='iterations_fid', value=self.progress_bar.n)
+                    #self.logger.log(metric_name='fid', value=fid)
+                    #self.logger.log(metric_name='iterations_fid', value=self.progress_bar.n)
                     # Save all logs
-                    self.logger.save_metrics(self.path_save_metrics)
+                    #self.logger.save_metrics(self.path_save_metrics)
             if epoch % save_model_after_n_epochs == 0:
                 torch.save(
                     {"generator": self.generator.module.state_dict()
@@ -304,7 +301,7 @@ class ModelWrapper(object):
         # Get list of masks for different layers
         masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in range(7)]
         # Init tensor of fake images to store all fake images
-        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
+        fake_images = torch.empty(7 ** 2, images.shape[1], images.shape[2], images.shape[3],
                                   dtype=torch.float32, device=device)
         # Init counter
         counter = 0
@@ -334,9 +331,4 @@ class ModelWrapper(object):
         # Save tensor as image
         torchvision.utils.save_image(
             misc.normalize_0_1_batch(fake_images),
-            # Fixed date formatting for windows
             os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))), nrow=7)
-        # Image for tensor board
-        # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
-        # writer2.add_image('Generated Images', grid_images, global_step=self.step_num)
-
