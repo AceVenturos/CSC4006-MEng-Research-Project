@@ -17,13 +17,14 @@ import copy
 import numpy as np
 from datetime import datetime
 import os
+import misc
+from PIL import Image
 
 from models import VGG16, Generator, Discriminator
 from lossfunction import SemanticReconstructionLoss, DiversityLoss, LSGANGeneratorLoss, LSGANDiscriminatorLoss
 from data import image_label_list_of_masks_collate_function
-from frechet_inception_distance import frechet_inception_distance
+from frechet_inception_distance import frechet_inception_distance, frechet_inception_distance_sgp_level
 from misc import Logger, get_masks_for_inference
-import misc
 
 
 class ModelWrapper(object):
@@ -125,6 +126,7 @@ class ModelWrapper(object):
 
     def train(self, epochs: int = 20, validate_after_n_iterations: int = 100000, device: str = 'cuda',
               save_model_after_n_epochs: int = 1, w_rec: float = 0.1, w_div: float = 0.1) -> None:
+        np.seterr('raise')
         """
         Training method
         :param epochs: (int) Number of epochs to perform
@@ -283,6 +285,8 @@ class ModelWrapper(object):
         torchvision.utils.save_image(misc.normalize_0_1_batch(fake_image),
                                      os.path.join(self.path_save_plots, str(self.progress_bar.n) + '.png'),
                                      nrow=7)
+        self.generator.train()
+        self.discriminator.train()
         return frechet_inception_distance(dataset_real=self.validation_dataset_fid,
                                           generator=self.generator, vgg16=self.vgg16)
 
@@ -297,14 +301,13 @@ class ModelWrapper(object):
         # Generator into eval mode
         self.generator.eval()
         # Get random images form validation dataset
-        print(len(self.validation_dataset_fid))
         images, labels, _ = image_label_list_of_masks_collate_function(
             [self.validation_dataset_fid.dataset[index] for index in
              np.random.choice(range(len(self.validation_dataset_fid)), replace=True, size=7)])
         # Get list of masks for different layers
         masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in range(7)]
         # Init tensor of fake images to store all fake images
-        fake_images = torch.empty(7 ** 2, images[0].shape[1], images[0].shape[2], images[0].shape[3],
+        fake_images = torch.empty(7 ** 2, images.shape[1], images.shape[2], images.shape[3],
                                   dtype=torch.float32, device=device)
         # Init counter
         counter = 0
@@ -336,7 +339,64 @@ class ModelWrapper(object):
             misc.normalize_0_1_batch(fake_images),
             # Fixed date formatting for windows
             os.path.join(self.path_save_plots, 'predictions_{}.png'.format(str(datetime.now()).replace(':', '-'))), nrow=7)
+        self.generator.train()
+        self.discriminator.train()
         # Image for tensor board
         # grid_images = torchvision.utils.make_grid(misc.normalize_0_1_batch(fake_images), nrow=7)
         # writer2.add_image('Generated Images', grid_images, global_step=self.step_num)
+
+    @torch.no_grad()
+    def inference_level(self, num_images, level, fid_flag):
+        device = 'cuda'
+        self.generator.to(device)
+        self.vgg16.to(device)
+        # Generator into eval mode
+        self.generator.eval()
+        # Get random images form validation dataset
+        images, labels, _ = image_label_list_of_masks_collate_function(
+           [self.validation_dataset_fid.dataset[index] for index in
+            range(len(self.validation_dataset_fid.dataset))])
+        # Get list of masks for selected level
+        masks_level = get_masks_for_inference(level, add_batch_size=True, device=device)
+        # Init counter
+        counter = 0
+        print(len(images))
+        fake_images = torch.empty(len(images), images.shape[1], images.shape[2], images.shape[3],
+                                 dtype=torch.float32, device=device)
+        # Loop over all image and masks
+        for image, label in zip(images, labels):
+            # Data to device
+            image = image.to(device)[None]
+            label = label.to(device)[None]
+            # Generate fake images
+            fake_image = self.generator(
+                input=torch.randn(1, self.latent_dimensions, dtype=torch.float32, device=device),
+                features=self.vgg16(image),
+                masks=masks_level,
+                class_id=label.float()).squeeze(dim=0)
+            # Save fake images
+            fake_images[counter] = fake_image
+            # Increment counter
+            counter += 1
+        # Normalise generated images
+        fake_images = misc.normalize_0_1_batch(fake_images)
+        # Get label names dictionary
+        label_dict = self.validation_dataset_fid.dataset.get_label_dict()
+        # Reset counter
+        counter = 0
+        for label in labels:
+            # Label class name
+            class_label = list(label_dict.keys())[list(label_dict.values()).index(torch.argmax(label))]
+            # Save generated image
+            torchvision.utils.save_image(
+               fake_images[counter],
+               os.path.join(self.path_save_plots, '{}_{}.png'.format(str(counter), str(class_label))))
+            # Increment counter
+            counter += 1
+
+        if fid_flag:
+            print(frechet_inception_distance_sgp_level(device='cuda', generator=self.generator, vgg16=self.vgg16,
+                                                       images=images, labels=labels, masks=masks_level))
+        self.generator.train()
+        self.discriminator.train()
 

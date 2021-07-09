@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import time
 import os
 import copy
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 plt.ion()
 
@@ -185,7 +186,7 @@ print(vgg16)
 # Deletes final pooling layer of model - Jamie 24/01 09:40
 del vgg16.features.pool5
 print(vgg16)
-
+exit(0)
 # If you want to train the model for more than 10 epochs, set this to True after the first run
 resume_training = False
 

@@ -65,6 +65,9 @@ class Places365(Dataset):
             masks = misc.get_masks_for_training()
         return image, label, masks
 
+    def get_label_dict(self):
+        return self.label_dict
+
 
 def image_label_list_of_masks_collate_function(batch: List[Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]]) -> \
         Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:

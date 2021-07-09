@@ -48,6 +48,101 @@ class Generator(nn.Module):
             GeneratorResidualBlock(in_channels=int(256 // channels_factor), out_channels=int(128 // channels_factor),
                                    feature_channels=129, number_of_classes=number_of_classes),
             GeneratorResidualBlock(in_channels=int(128 // channels_factor), out_channels=int(64 // channels_factor),
+                                   feature_channels=65, number_of_classes=number_of_classes),
+        ])
+        # Init final block
+        self.final_block = nn.Sequential(
+            nn.UpsamplingNearest2d(scale_factor=2),
+            nn.BatchNorm2d(int(64 // channels_factor)),
+            nn.LeakyReLU(negative_slope=0.2),
+            spectral_norm(nn.Conv2d(in_channels=int(64 // channels_factor), out_channels=int(64 // channels_factor),
+                                    kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=True)),
+            nn.LeakyReLU(negative_slope=0.2),
+            spectral_norm(
+                nn.Conv2d(in_channels=int(64 // channels_factor), out_channels=out_channels, kernel_size=(1, 1),
+                          stride=(1, 1), padding=(0, 0), bias=True))
+        )
+        # Init weights
+        self.apply(init_weights)
+
+    def forward(self, input: torch.Tensor, features: List[torch.Tensor],
+                masks: List[torch.Tensor] = None, class_id: torch.Tensor = None) -> torch.Tensor:
+        '''
+        Forward pass
+        :param input: (torch.Tensor) Input latent tensor
+        :param features: (List[torch.Tensor]) List of vgg16 features
+        :return: (torch.Tensor) Generated output image
+        '''
+        # Init depth counter
+        depth_counter = len(features) - 1
+        # Initial linear layer
+        output = self.linear_layer(input)
+        # Forward pass linear blocks
+        output = self.linear_block_1(output, features[depth_counter] * masks[depth_counter])
+        depth_counter -= 1
+        output = self.linear_block_2(output, features[depth_counter] * masks[depth_counter])
+        depth_counter -= 1
+        # Reshaping
+        output = output.view(output.shape[0], -1, 4, 4)
+        # Forward pass last linear layer
+        output = self.convolution_layer(output)
+
+        global upsamplingCount
+        upsamplingCount = 0
+
+        # Main path
+        for layer in self.main_path:
+            if isinstance(layer, SelfAttention):
+                output = layer(output)
+            else:
+                # Mask feature and concat mask
+                feature = features[depth_counter]
+                mask = masks[depth_counter]
+                feature = torch.cat((feature * mask, mask), dim=1)
+                output = layer(output, feature, class_id)
+                depth_counter -= 1
+        # Final block
+        output = self.final_block(output)
+        return output.tanh()
+
+
+class Generator2(nn.Module):
+    '''
+    Generator network
+    '''
+
+    def __init__(self, out_channels: int = 3, latent_dimensions: int = 128,
+                 channels_factor: Union[int, float] = 1, number_of_classes: int = 10) -> None:
+        '''
+        Constructor method
+        :param out_channels: (int) Number of output channels (1 = grayscale, 3 = rgb)
+        :param latent_dimensions: (int) Latent dimension size
+        :param channels_factor: (int, float) Channel factor to adopt the channel size in each layer
+        :param number_of_classes: (int) Number of classes in class tensor
+        '''
+        super(Generator2, self).__init__()
+        # Save parameters
+        self.latent_dimensions = latent_dimensions
+        # Init linear input layers
+        self.linear_layer = spectral_norm(
+            nn.Linear(in_features=latent_dimensions, out_features=latent_dimensions, bias=True))
+        self.linear_block_1 = LinearBlock(in_features=latent_dimensions, out_features=10, feature_size=10)
+        self.linear_block_2 = LinearBlock(in_features=10, out_features=2048, feature_size=4096)
+        self.convolution_layer = spectral_norm(
+            nn.Conv2d(in_channels=128, out_channels=int(512 // channels_factor), kernel_size=(1, 1), padding=(0, 0),
+                      stride=(1, 1), bias=True))
+        # Init main residual path
+        self.main_path = nn.ModuleList([
+            GeneratorResidualBlock2(in_channels=int(512 // channels_factor), out_channels=int(512 // channels_factor),
+                                   feature_channels=513, number_of_classes=number_of_classes),
+            GeneratorResidualBlock2(in_channels=int(512 // channels_factor), out_channels=int(512 // channels_factor),
+                                   feature_channels=513, number_of_classes=number_of_classes),
+            GeneratorResidualBlock2(in_channels=int(512 // channels_factor), out_channels=int(256 // channels_factor),
+                                   feature_channels=257, number_of_classes=number_of_classes),
+            SelfAttention(channels=int(256 // channels_factor)),
+            GeneratorResidualBlock2(in_channels=int(256 // channels_factor), out_channels=int(128 // channels_factor),
+                                   feature_channels=129, number_of_classes=number_of_classes),
+            GeneratorResidualBlock2(in_channels=int(128 // channels_factor), out_channels=int(64 // channels_factor),
                                    feature_channels=65, number_of_classes=number_of_classes)
         ])
         # Init final block
@@ -122,9 +217,9 @@ class Discriminator(nn.Module):
         # Init layers
         self.layers = nn.Sequential(
             DiscriminatorInputResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
+            SelfAttention(channels=int(64 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
-            SelfAttention(channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
@@ -163,15 +258,79 @@ class Discriminator(nn.Module):
         output = self.classification(output)
         return output + output_embedding
 
+
+class DiscriminatorAuxRotation(nn.Module):
+    '''
+    Discriminator w/Auxiliary Rotation task
+    '''
+
+    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 10):
+        '''
+        Constructor mehtod
+        :param in_channels: (int) Number of input channels (grayscale = 1, rgb =3)
+        :param channel_factor: (int, float) Channel factor to adopt the channel size in each layer
+        '''
+        # Call super constructor
+        super(DiscriminatorAuxRotation, self).__init__()
+        # Init layers
+        self.layers = nn.Sequential(
+            DiscriminatorInputResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
+            SelfAttention(channels=int(256 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
+            DiscriminatorResidualBlock(in_channels=int(512 // channel_factor), out_channels=int(512 // channel_factor)),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.AdaptiveAvgPool2d(output_size=(1, 1)),
+            nn.Flatten(start_dim=1),
+            spectral_norm(nn.Linear(in_features=int(512 // channel_factor), out_features=128, bias=True)),
+            nn.LeakyReLU(negative_slope=0.2)
+        )
+
+        # Init classification layer
+        # Init classification layer
+        self.classification = spectral_norm(
+            nn.Linear(in_features=128, out_features=1, bias=True))
+        # Init embedding layer
+        self.embedding = spectral_norm(nn.Embedding(num_embeddings=number_of_classes,
+                                                    embedding_dim=128))
+        # Init weights
+        self.apply(init_weights)
+
+        self.rotationClassification = spectral_norm(
+            nn.Linear(in_features=128, out_features=4, bias=True))
+
+        self.softmax = nn.Softmax()
+
+    def forward(self, input: torch.Tensor, class_id: torch.Tensor) -> torch.Tensor:
+        '''
+        Forward pass
+        :param input: (torch.Tensor) Input image to be classified, real or fake. Image shape (batch size, 1 or 3, height, width)
+        :return: (torch.Tensor) Output prediction of shape (batch size, 1)
+        '''
+
+        # Main path
+        global downsamplingCount
+        downsamplingCount = 0
+        output = self.layers(input)
+        # Reshape output into two dimensions
+        output = output.flatten(start_dim=1)
+        # Perform embedding
+        # output_embedding = self.embedding(class_id.argmax(dim=-1, keepdim=True))
+        # output_embedding = output * output_embedding
+        # Classification path
+        output = self.classification(output)
+        return output #+ output_embedding
+
     # Added due to the class embeddings in the previous foward method - Jamie 05/02/21 12:06
     def aux_rotation_forward(self, input: torch.Tensor) -> torch.Tensor:
         # Downsampling Count Reset
         global downsamplingCount
         downsamplingCount = 0
-
         # Main Path
         output = self.layers(input)
-
         # Reshape output into two dimensions
         output = output.flatten(start_dim=1)
 
@@ -378,6 +537,83 @@ class GeneratorResidualBlock(nn.Module):
                 output = layer(output, class_id)
             else:
                 output = layer(output)
+
+        if upsamplingCount > 1:
+            input = self.upsampling(input)
+        # Residual mapping
+        output_residual = self.residual_mapping(input)
+        output_main = output + output_residual
+
+        upsamplingCount += 1
+
+        # Feature path
+        mapped_features = self.masked_feature_mapping(masked_features)
+        # Addition step
+        output = output_main + mapped_features
+        return output
+
+
+class GeneratorResidualBlock2(nn.Module):
+    '''
+    Residual block
+    '''
+
+    def __init__(self, in_channels: int, out_channels: int, feature_channels: int,
+                 number_of_classes: int = 10) -> None:
+        '''
+        Constructor
+        :param in_channels: (int) Number of input channels
+        :param out_channels: (int) Number of output channels
+        :param number_of_classes: (int) Number of classes in class tensor
+        :param feature_channels: (int) Number of feature channels
+        '''
+        # Call super constructor
+        super(GeneratorResidualBlock2, self).__init__()
+        # Init main operations
+        self.main_block1 = nn.ModuleList([
+            nn.BatchNorm2d(num_features=in_channels, momentum=0.001, affine=False),
+            nn.LeakyReLU(negative_slope=0.2)
+        ])
+        self.upsampling = nn.UpsamplingNearest2d(scale_factor=2)
+        self.main_block2 = nn.ModuleList([
+            spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                                    kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=True)),
+            nn.BatchNorm2d(num_features=out_channels, momentum=0.001, affine=False),
+            nn.LeakyReLU(negative_slope=0.2),
+            spectral_norm(nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
+                                    kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=True))
+        ])
+        # Init residual mapping
+        self.residual_mapping = nn.Sequential(
+            spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=(1, 1),
+                                    stride=(1, 1), padding=(0, 0), bias=True)))
+        # Init convolution for mapping the masked features
+        self.masked_feature_mapping = spectral_norm(
+            nn.Conv2d(in_channels=feature_channels, out_channels=out_channels,
+                      kernel_size=(3, 3), stride=(1, 1), padding=(1, 1),
+                      bias=True))
+
+    def forward(self, input: torch.Tensor, masked_features: torch.Tensor, class_id: torch.Tensor) -> torch.Tensor:
+        '''
+        Forward pass
+        :param input: (torch.Tensor) Input tensor
+        :param masked_features: (torch.Tensor) Masked feature tensor form vvg16
+        :param class_id: (torch.Tensor) Class one-hot vector
+        :return: (torch.Tensor) Output tensor
+        '''
+        # Main path
+        output = input
+
+        global upsamplingCount
+
+        for layer in self.main_block1:
+            output = layer(output)
+
+        if upsamplingCount > 1:
+            output = self.upsampling(output)
+
+        for layer in self.main_block2:
+            output = layer(output)
 
         if upsamplingCount > 1:
             input = self.upsampling(input)

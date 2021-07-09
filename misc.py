@@ -129,6 +129,28 @@ def get_masks_for_inference(stage_index_to_choose: int,
     return masks
 
 
+def get_masks_for_inference_alt(stage_index_to_choose: int,
+                                mask_shapes: Tuple[Tuple[int, int, int], ...] = (
+                                    (1, 32, 32), (1, 16, 16), (1, 8, 8), (1, 4, 4), (1, 4, 4), (4096,), (10,)),
+                                device: str = 'cpu',
+                                add_batch_size: bool = False) -> List[torch.Tensor]:
+    # Init list for masks
+    masks = []
+    # Loop over all shapes
+    for index, mask_shape in enumerate(reversed(mask_shapes)):
+        if index >= stage_index_to_choose:
+            masks.append(torch.ones(mask_shape, dtype=torch.float32, device=device))
+        else:
+            masks.append(torch.zeros(mask_shape, dtype=torch.float32, device=device))
+    # Add batch size dimension
+    if add_batch_size:
+        for index in range(len(masks)):
+            masks[index] = masks[index].unsqueeze(dim=0)
+    # Reverse order of masks to match the features of the vgg16 model
+    masks.reverse()
+    return masks
+
+
 def normalize_0_1_batch(input: torch.tensor) -> torch.tensor:
     '''
     Normalize a given tensor to a range of [-1, 1]

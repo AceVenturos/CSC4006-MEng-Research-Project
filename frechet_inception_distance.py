@@ -121,3 +121,86 @@ def frechet_inception_distance(dataset_real: DataLoader, generator: nn.Module, v
     # Calc FID
     fid = diff_squared + np.trace(real_cov) + np.trace(fake_cov) - 2 * np.trace(cov_mean)
     return fid
+
+
+@torch.no_grad()
+def frechet_inception_distance_sgp_level(generator, vgg16, device, images, labels, masks) -> float:
+    '''
+    Function computes the frechet inception distance
+    :param dataset_real: (Dataset) Dataset including real samples
+    :param dataset_fake: (Datasets.GeneratorDataset) Dataset samples from generator network
+    :param device: (str) Device to use
+    :return: (float) FID score
+    '''
+    if device is None:
+       device = 'cuda'
+    # Init inception net
+    inception_net = InceptionNetworkFID().to(device)
+    # Inception net to device
+    inception_net.to(device)
+    # Inception net into eval mode
+    inception_net.eval()
+    # Get real activations
+    real_activations = []
+    fake_activations = []
+    fake_images = []
+    for image, label in zip(images, labels):
+        # Data to device
+        image = image.to(device)[None]
+        label = label.to(device)[None]
+        # Normalize images
+        images_normalized = misc.normalize_m1_1_batch(image)
+        # Reshape
+        if images_normalized.shape[2] != 299 or images_normalized.shape[3] != 299:
+            images_reshaped = nn.functional.interpolate(images_normalized, size=(299, 299), mode='bilinear',
+                                                       align_corners=False)
+        else:
+            images_reshaped = images_normalized
+        # Get activations
+        real_activations.append(inception_net(images_reshaped).detach().cpu())
+        # Get fake images
+        # Get features of images from vgg16 model
+        with torch.no_grad():
+            features_real = vgg16(image)
+        # Generate random noise vector
+        noise_vector = torch.randn((image.shape[0],
+                                   generator.module.latent_dimensions
+                                   if isinstance(generator, nn.DataParallel) else generator.latent_dimensions),
+                                   dtype=torch.float32, device=device, requires_grad=True)
+        # Generate fake images
+        images_fake = generator(input=noise_vector, features=features_real, masks=masks)#, class_id=label.float())
+        # Normalize fake images
+        images_fake = misc.normalize_m1_1_batch(images_fake)
+        # Reshape
+        if images_fake.shape[2] != 299 or images_fake.shape[3] != 299:
+            images_fake = nn.functional.interpolate(images_fake, size=(299, 299), mode='bilinear',
+                                                   align_corners=False)
+        # Get activation
+        fake_activations.append(inception_net(images_fake).detach().cpu())
+
+    # Make one big numpy array by concat at batch dim
+    real_activations = torch.cat(real_activations, dim=0).numpy()
+    # Make again one big numpy array
+    fake_activations = torch.cat(fake_activations, dim=0).numpy()
+    # Calc statistics of real activations
+    real_mu = np.mean(real_activations, axis=0)
+    real_cov = np.cov(real_activations, rowvar=False)
+    # Calc statistics of fake activations
+    fake_mu = np.mean(fake_activations, axis=0)
+    fake_cov = np.cov(fake_activations, rowvar=False)
+    # Check that mu and cov arrays of real and fake have the same shapes
+    assert real_mu.shape == fake_mu.shape
+    assert real_cov.shape == fake_cov.shape
+    # Calc diff of mu real and fake
+    diff = real_mu - fake_mu
+    # Square diff
+    diff_squared = diff @ diff
+    # Calc cov mean of fake and real cov
+    cov_mean, _ = sqrtm(real_cov @ fake_cov, disp=False)
+    # Remove image path of cov mean
+    if np.iscomplexobj(cov_mean):
+       cov_mean = cov_mean.real
+    # Calc FID
+    fid = diff_squared + np.trace(real_cov) + np.trace(fake_cov) - 2 * np.trace(cov_mean)
+
+    return fid
