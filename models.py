@@ -183,7 +183,7 @@ class VGG16(nn.Module):
             self.vgg16 = torch.load(path_to_pre_trained_model)
         else:
             self.vgg16 = torchvision.models.vgg16(pretrained=False)
-            self.vgg16.classifier[-1] = nn.Linear(in_features=4096, out_features=365, bias=True)
+            self.vgg16.classifier[-1] = nn.Linear(in_features=4096, out_features=10, bias=True)
         # Convert feature module into model list
         self.vgg16.features = nn.ModuleList(list(self.vgg16.features))
         # Convert classifier into module list
@@ -298,6 +298,7 @@ class GeneratorResidualBlock(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, feature_channels: int,
                  number_of_classes: int = 365) -> None:
+                 number_of_classes: int = 10) -> None:
         '''
         Constructor
         :param in_channels: (int) Number of input channels
@@ -367,7 +368,7 @@ class GeneratorResidualBlock(nn.Module):
         output_main = output + output_residual
 
         upsamplingCount += 1
-
+        
         # Feature path
         mapped_features = self.masked_feature_mapping(masked_features)
         # Addition step
@@ -557,3 +558,10 @@ def init_weights(module: nn.Module) -> None:
         nn.init.xavier_uniform_(module.weight)
         # Init bias
         module.bias.data.fill_(0.)
+
+# Downsizing Training Results 13/01 - 16:51
+# Parameters G: 19,748,356
+# Parameters D: 1,772,963
+# Iterations:   1,803,459
+# Predicted training time ~100-120 Hours for 1 epoch with a batch size of 2
+

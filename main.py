@@ -9,6 +9,7 @@ parser.add_argument('--train', default=False, action='store_true',
 parser.add_argument('--test', default=False, action='store_true',
                     help='Test network')
 
+
 parser.add_argument('--batch_size', type=int, default=20,
                     help='Batch size of the training and test set (default=60)')
 
@@ -94,19 +95,44 @@ if __name__ == '__main__':
         discriminator = nn.DataParallel(discriminator)
         vgg16 = nn.DataParallel(vgg16)
 
-    # Init model wrapper
-    model_wrapper = ModelWrapper(generator=generator,
-                                 discriminator=discriminator,
-                                 vgg16=vgg16,
-                                 training_dataset=training_dataset,
-                                 validation_dataset=validation_dataset,
-                                 validation_dataset_fid=validation_dataset_fid,
-                                 generator_optimizer=generator_optimizer,
-                                 discriminator_optimizer=discriminator_optimizer)
+    # Initialises chosen model wrapper for training - Jamie 12/02 15:06
+    if args.model_wrapper == 0:
+        model_wrapper = ModelWrapper(generator=generator,
+                                     discriminator=discriminator,
+                                     vgg16=vgg16,
+                                     training_dataset=training_dataset,
+                                     validation_dataset=validation_dataset,
+                                     validation_dataset_fid=validation_dataset_fid,
+                                     generator_optimizer=generator_optimizer,
+                                     discriminator_optimizer=discriminator_optimizer)
+    elif args.model_wrapper == 1:
+        discriminator2 = DiscriminatorAuxRotation(channel_factor=args.channel_factor)
+        model_wrapper = AuxRotationModelWrapper(generator=generator,
+                                                discriminator=discriminator2,
+                                                vgg16=vgg16,
+                                                training_dataset=training_dataset,
+                                                validation_dataset=validation_dataset,
+                                                validation_dataset_fid=validation_dataset_fid,
+                                                generator_optimizer=generator_optimizer,
+                                                discriminator_optimizer=discriminator_optimizer,
+                                                weight_rotation_loss_g=0.1,
+                                                weight_rotation_loss_d=0.1)
+    else:
+        print("ERR: Select a valid model wrapper option:\n\t0: Original SGP\n\t1: Self-Supervised SGP w/ Aux Rotation")
+        exit(1)
 
-    # Perform training
+    # Performs training - TODO: Update one of the wrappers so I can get rid of unnecessary if statement
     if args.train:
-        model_wrapper.train(epochs=args.epochs, device=args.device)
+        if args.model_wrapper == 0:
+            # Testing - Jamie 12/02 15:19
+            # print("Here 0")
+            # exit(0)
+            model_wrapper.train(epochs=args.epochs, device=args.device, w_rec=0.1, w_div=0.1)
+        elif args.model_wrapper == 1:
+            # Testing - Jamie 12/02 15:19
+            # print("Here 1")
+            # exit(0)
+            model_wrapper.train(epochs=args.epochs, batch_size=args.batch_size, device=args.device)
 
     # Perform testing
     if args.test:

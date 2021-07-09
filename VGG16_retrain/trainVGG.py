@@ -187,7 +187,7 @@ del vgg16.features.pool5
 print(vgg16)
 
 # If you want to train the model for more than 10 epochs, set this to True after the first run
-resume_training = True
+resume_training = False
 
 if resume_training:
     print("Loading pretrained model..")
@@ -318,12 +318,45 @@ def train_model(vgg, criterion, optimizer, scheduler, num_epochs=10):
 print("Test before training")
 eval_model(vgg16, criterion)
 
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_10ep.pt')
+
+print("Test After training 10")
+eval_model(vgg16, criterion)
+
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_20ep.pt')
+
+print("Test After training 20")
+eval_model(vgg16, criterion)
+
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_30ep.pt')
+
+print("Test After training 30")
+eval_model(vgg16, criterion)
+
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_40ep.pt')
+
+print("Test After training 40")
+eval_model(vgg16, criterion)
 
 vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
 torch.save(vgg16, 'VGG16_P10_50ep.pt')
 
-print("Test before training")
+print("Test After training 50")
 eval_model(vgg16, criterion)
 
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_60ep.pt')
+
+print("Test After training 60")
+eval_model(vgg16, criterion)
+
+vgg16 = train_model(vgg16, criterion, optimizer_ft, exp_lr_scheduler, 10)
+torch.save(vgg16, 'VGG16_P10_70ep.pt')
+
+print("Test After training 70")
 eval_model(vgg16, criterion)
 
