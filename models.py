@@ -32,9 +32,9 @@ class Generator(nn.Module):
         self.linear_layer = spectral_norm(
             nn.Linear(in_features=latent_dimensions, out_features=latent_dimensions, bias=True))
         self.linear_block_1 = LinearBlock(in_features=latent_dimensions, out_features=10, feature_size=10)
-        self.linear_block_2 = LinearBlock(in_features=10, out_features=2048, feature_size=4096)
+        self.linear_block_2 = LinearBlock(in_features=10, out_features=4096, feature_size=4096)
         self.convolution_layer = spectral_norm(
-            nn.Conv2d(in_channels=128, out_channels=int(512 // channels_factor), kernel_size=(1, 1), padding=(0, 0),
+            nn.Conv2d(in_channels=256, out_channels=int(512 // channels_factor), kernel_size=(1, 1), padding=(0, 0),
                       stride=(1, 1), bias=True))
         # Init main residual path
         self.main_path = nn.ModuleList([
@@ -44,11 +44,12 @@ class Generator(nn.Module):
                                    feature_channels=513, number_of_classes=number_of_classes),
             GeneratorResidualBlock(in_channels=int(512 // channels_factor), out_channels=int(256 // channels_factor),
                                    feature_channels=257, number_of_classes=number_of_classes),
-            SelfAttention(channels=int(256 // channels_factor)),
             GeneratorResidualBlock(in_channels=int(256 // channels_factor), out_channels=int(128 // channels_factor),
                                    feature_channels=129, number_of_classes=number_of_classes),
+            SelfAttention(channels=int(128 // channels_factor)),
             GeneratorResidualBlock(in_channels=int(128 // channels_factor), out_channels=int(64 // channels_factor),
                                    feature_channels=65, number_of_classes=number_of_classes),
+            SelfAttention(channels=int(64 // channels_factor))
         ])
         # Init final block
         self.final_block = nn.Sequential(
@@ -206,7 +207,7 @@ class Discriminator(nn.Module):
     Discriminator network
     '''
 
-    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 365):
+    def __init__(self, in_channels: int = 3, channel_factor: Union[int, float] = 1, number_of_classes: int = 10):
         '''
         Constructor mehtod
         :param in_channels: (int) Number of input channels (grayscale = 1, rgb =3)
@@ -219,8 +220,8 @@ class Discriminator(nn.Module):
             DiscriminatorInputResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
             SelfAttention(channels=int(64 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
+            SelfAttention(channels=int(128 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
-            SelfAttention(channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
@@ -648,7 +649,7 @@ class LinearBlock(nn.Module):
             spectral_norm(nn.Linear(in_features=in_features, out_features=out_features, bias=True))
         )
         # Init mapping the masked features
-        self.masked_feature_mapping = nn.Linear(in_features=feature_size, out_features=out_features, bias=True)
+        self.masked_feature_mapping = spectral_norm(nn.Linear(in_features=feature_size, out_features=out_features, bias=True))
 
     def forward(self, input: torch.Tensor, masked_features: torch.Tensor) -> torch.Tensor:
         '''
