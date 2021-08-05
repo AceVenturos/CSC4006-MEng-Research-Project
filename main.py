@@ -32,6 +32,9 @@ parser.add_argument('--device', type=str, default='cuda',
 parser.add_argument('--gpus_to_use', type=str, default='0',
                     help='Indexes of the GPUs to be use (default=0)')
 
+parser.add_argument('--load_checkpoint', type=str, default=None,
+                    help='Path to checkpoint to be loaded (default=None)')
+
 # Review checkpoint CR implemented and determine if its worth using one over the other, initial inclination is towards
 # seperate networks for better utility as it allows G/D networks to be paired with more control rather than a single
 # pairing of G/D networks 09/06 Jamie
@@ -98,6 +101,13 @@ if __name__ == '__main__':
     # Initialise optimizers
     generator_optimizer = torch.optim.Adam(generator.parameters(), lr=args.lr)
     discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=0.1*args.lr)
+
+    if args.load_checkpoint is not None:
+        checkpoint = torch.load(args.load_checkpoint, map_location='cpu')
+        generator.load_state_dict(checkpoint['generator'])
+        discriminator.load_state_dict(checkpoint['discriminator'])
+        generator_optimizer.load_state_dict(checkpoint['generator_optimizer'])
+        discriminator_optimizer.load_state_dict(checkpoint['discriminator_optimizer'])
 
     # Print number of network parameters
     print('Number of generator parameters', sum(p.numel() for p in generator.parameters()))
