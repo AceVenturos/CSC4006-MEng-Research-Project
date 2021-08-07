@@ -308,8 +308,9 @@ class ModelWrapper(object):
         # Get random images form validation dataset
         print(len(self.validation_dataset_fid))
         images, labels, _ = image_label_list_of_masks_collate_function(
-            [self.validation_dataset_fid.dataset[index] for index in
-             np.random.choice(range(len(self.validation_dataset_fid)), replace=True, size=7)])
+            [self.validation_dataset_fid.dataset[index] for index in range(7)])
+             #bug buggy TODO: reference in software doc
+             #np.random.choice(range(len(self.validation_dataset_fid)), replace=True, size=7)])
         # Get list of masks for different layers
         masks_levels = [get_masks_for_inference(layer, add_batch_size=True, device=device) for layer in range(7)]
         # Init tensor of fake images to store all fake images

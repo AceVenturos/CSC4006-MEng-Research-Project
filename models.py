@@ -44,11 +44,12 @@ class Generator(nn.Module):
                                    feature_channels=513, number_of_classes=number_of_classes),
             GeneratorResidualBlock(in_channels=int(512 // channels_factor), out_channels=int(256 // channels_factor),
                                    feature_channels=257, number_of_classes=number_of_classes),
-            SelfAttention(channels=int(256 // channels_factor)),
             GeneratorResidualBlock(in_channels=int(256 // channels_factor), out_channels=int(128 // channels_factor),
                                    feature_channels=129, number_of_classes=number_of_classes),
+            SelfAttention(channels=int(128 // channels_factor)),
             GeneratorResidualBlock(in_channels=int(128 // channels_factor), out_channels=int(64 // channels_factor),
-                                   feature_channels=65, number_of_classes=number_of_classes)
+                                   feature_channels=65, number_of_classes=number_of_classes),
+            SelfAttention(channels=int(64 // channels_factor))
         ])
         # Init final block
         self.final_block = nn.Sequential(
@@ -217,9 +218,10 @@ class Discriminator(nn.Module):
         # Init layers
         self.layers = nn.Sequential(
             DiscriminatorInputResidualBlock(in_channels=in_channels, out_channels=int(64 // channel_factor)),
+            SelfAttention(channels=int(64 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(64 // channel_factor), out_channels=int(128 // channel_factor)),
+            SelfAttention(channels=int(128 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(128 // channel_factor), out_channels=int(256 // channel_factor)),
-            SelfAttention(channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(256 // channel_factor)),
             DiscriminatorResidualBlock(in_channels=int(256 // channel_factor), out_channels=int(512 // channel_factor)),
