@@ -123,7 +123,8 @@ def frechet_inception_distance(dataset_real: DataLoader, generator: nn.Module, v
 
 
 @torch.no_grad()
-def frechet_inception_distance_sgp_level(generator, vgg16, device, images, labels, masks) -> float:
+def frechet_inception_distance_sgp_level(generator, vgg16,
+                                         device, images, labels, masks) -> float:
     '''
     Function computes the frechet inception distance
     :param dataset_real: (Dataset) Dataset including real samples
@@ -132,7 +133,7 @@ def frechet_inception_distance_sgp_level(generator, vgg16, device, images, label
     :return: (float) FID score
     '''
     if device is None:
-       device = 'cuda'
+        device = 'cuda'
     # Init inception net
     inception_net = InceptionNetworkFID().to(device)
     # Inception net to device
@@ -152,7 +153,7 @@ def frechet_inception_distance_sgp_level(generator, vgg16, device, images, label
         # Reshape
         if images_normalized.shape[2] != 299 or images_normalized.shape[3] != 299:
             images_reshaped = nn.functional.interpolate(images_normalized, size=(299, 299), mode='bilinear',
-                                                       align_corners=False)
+                                                        align_corners=False)
         else:
             images_reshaped = images_normalized
         # Get activations
@@ -163,17 +164,17 @@ def frechet_inception_distance_sgp_level(generator, vgg16, device, images, label
             features_real = vgg16(image)
         # Generate random noise vector
         noise_vector = torch.randn((image.shape[0],
-                                   generator.module.latent_dimensions
-                                   if isinstance(generator, nn.DataParallel) else generator.latent_dimensions),
+                                    generator.module.latent_dimensions
+                                    if isinstance(generator, nn.DataParallel) else generator.latent_dimensions),
                                    dtype=torch.float32, device=device, requires_grad=True)
         # Generate fake images
-        images_fake = generator(input=noise_vector, features=features_real, masks=masks)#, class_id=label.float())
+        images_fake = generator(input=noise_vector, features=features_real, masks=masks, class_id=label.float())
         # Normalize fake images
         images_fake = misc.normalize_m1_1_batch(images_fake)
         # Reshape
         if images_fake.shape[2] != 299 or images_fake.shape[3] != 299:
             images_fake = nn.functional.interpolate(images_fake, size=(299, 299), mode='bilinear',
-                                                   align_corners=False)
+                                                    align_corners=False)
         # Get activation
         fake_activations.append(inception_net(images_fake).detach().cpu())
 
@@ -198,8 +199,8 @@ def frechet_inception_distance_sgp_level(generator, vgg16, device, images, label
     cov_mean, _ = sqrtm(real_cov @ fake_cov, disp=False)
     # Remove image path of cov mean
     if np.iscomplexobj(cov_mean):
-       cov_mean = cov_mean.real
+        cov_mean = cov_mean.real
     # Calc FID
     fid = diff_squared + np.trace(real_cov) + np.trace(fake_cov) - 2 * np.trace(cov_mean)
 
-    return fid
+    return fid#, incep_score

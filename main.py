@@ -128,8 +128,8 @@ if __name__ == '__main__':
     # Back to 50, believe this is causing an error i.e. CUDA out of memory
     validation_dataset_fid = DataLoader(
         data.Places365(path_to_index_file=args.path_to_dataset, index_file_name='val.txt',
-                       max_length=100, validation=True),
-        batch_size=args.batch_size, num_workers=2, shuffle=True,
+                       max_length=1000, validation=True),
+        batch_size=args.batch_size, num_workers=2, shuffle=False,
         collate_fn=data.image_label_list_of_masks_collate_function)
     validation_dataset = data.Places365(path_to_index_file=args.path_to_dataset, index_file_name='val.txt',
                                         validation=True)
@@ -181,4 +181,10 @@ if __name__ == '__main__':
     if args.test:
         # print('FID=', model_wrapper.validate(device=args.device))
         # model_wrapper.inference(device=args.device)
+        print(model_wrapper.inference_level(1000, level=0, fid_flag=True))
+        print(model_wrapper.inference_level(1000, level=1, fid_flag=True))
+        print(model_wrapper.inference_level(1000, level=2, fid_flag=True))
+        print(model_wrapper.inference_level(1000, level=3, fid_flag=True))
         print(model_wrapper.inference_level(1000, level=4, fid_flag=True))
+        print(model_wrapper.inference_level(1000, level=5, fid_flag=True))
+        print(model_wrapper.inference_level(1000, level=6, fid_flag=True))

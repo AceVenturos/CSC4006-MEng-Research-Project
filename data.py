@@ -21,7 +21,7 @@ class Places365(Dataset):
         self.return_masks = return_masks
         self.validation = validation
         # Get index file
-        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name)).values[:, 0]
+        self.file_paths = pd.read_csv(os.path.join(path_to_index_file, index_file_name), header=None).values[:, 0]
         self.file_paths.sort()
         # Make dict of labels
         self.label_dict = dict()

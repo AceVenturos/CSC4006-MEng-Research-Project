@@ -23,7 +23,7 @@ from PIL import Image
 from models import VGG16, Generator, Discriminator
 from lossfunction import SemanticReconstructionLoss, DiversityLoss, LSGANGeneratorLoss, LSGANDiscriminatorLoss
 from data import image_label_list_of_masks_collate_function
-from frechet_inception_distance import frechet_inception_distance
+from frechet_inception_distance import frechet_inception_distance, frechet_inception_distance_sgp_level
 from misc import Logger, get_masks_for_inference
 
 
@@ -386,6 +386,11 @@ class ModelWrapper(object):
             counter += 1
         # Normalise generated images
         fake_images = misc.normalize_0_1_batch(fake_images)
+        #
+        path_level_plot = os.path.join(self.path_save_plots, 'level_{}'.format(str(level)))
+        if not os.path.exists(path_level_plot):
+            os.makedirs(path_level_plot)
+
         # Get label names dictionary
         label_dict = self.validation_dataset_fid.dataset.get_label_dict()
         # Reset counter
@@ -396,7 +401,7 @@ class ModelWrapper(object):
             # Save generated image
             torchvision.utils.save_image(
                fake_images[counter],
-               os.path.join(self.path_save_plots, '{}_{}.png'.format(str(counter), str(class_label))))
+               os.path.join(path_level_plot, '{}_{}.png'.format(str(counter), str(class_label))))
             # Increment counter
             counter += 1
 
